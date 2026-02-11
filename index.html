@@ -49,6 +49,8 @@
         const fileInput = document.getElementById('fileInput');
         const fileName = document.getElementById('fileName');
         const processBtn = document.getElementById('processBtn');
+        //Cambiar por la url real de n8n publicada
+        const N8N_WEBHOOK_URL = "https://n8n-demo.onrender.com/webhook/demo";
 
         fileInput.addEventListener('change', () => {
             if (fileInput.files.length > 0) {
@@ -69,7 +71,7 @@
             const formData = new FormData()
             formData.append('file', file)
 
-            const response = await fetch("http://localhost:5678/webhook-test/0d0be75f-4b9a-416e-9cbf-78885f114c2a", {
+            const response = await fetch(N8N_WEBHOOK_URL, {
                 method: 'POST',
                 body: formData,
                 headers: {
