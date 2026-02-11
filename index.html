@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Demo · Automatización de Facturas</title>
+    <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+
+    <div class="container">
+        <h1>Automatización de Facturas</h1>
+        <p class="subtitle">
+            Sube una factura (PDF o imagen) y obtén automáticamente los datos contables.
+        </p>
+
+        <div class="upload-card">
+            <input type="file" id="fileInput" accept=".pdf,image/*" hidden />
+            <label for="fileInput" class="upload-button">
+                📄 Subir factura
+            </label>
+
+            <p id="fileName" class="file-name">Ningún archivo seleccionado</p>
+
+            <button id="processBtn" disabled>
+                Procesar factura
+            </button>
+        </div>
+
+        <div id="result" class="result hidden">
+            <h2>Resultado</h2>
+
+            <div class="result-grid">
+                <div><span>Proveedor</span><strong id="empresa"></strong></div>
+                <div><span>Nº Factura</span><strong id="numFactura"></strong></div>
+                <div><span>Fecha</span><strong id="fecha"></strong></div>
+                <div><span>Total</span><strong id="total"></strong></div>
+            </div>
+        </div>
+
+        <footer>
+            <span>Demo técnica · No se almacenan documentos</span>
+        </footer>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const fileName = document.getElementById('fileName');
+        const processBtn = document.getElementById('processBtn');
+
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                fileName.textContent = fileInput.files[0].name;
+                processBtn.disabled = false;
+            } else {
+                fileName.textContent = 'Ningún archivo seleccionado';
+                processBtn.disabled = true;
+            }
+        });
+
+        processBtn.addEventListener('click', () => {
+            let file = fileInput.files[0]
+            conectionWorkflow(file)
+        })
+
+        async function conectionWorkflow(file) {
+            const formData = new FormData()
+            formData.append('file', file)
+
+            const response = await fetch("http://localhost:5678/webhook-test/0d0be75f-4b9a-416e-9cbf-78885f114c2a", {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'x-demo-token': 'token-demo-123'
+                }
+            });
+
+            const data = await response.json();
+        }
+
+        // Demo fake (luego aquí llamas a tu webhook)
+        /*processBtn.addEventListener('click', () => {
+           document.getElementById('result').classList.remove('hidden');
+     
+           document.getElementById('empresa').textContent = 'ESADE, S.L.';
+           document.getElementById('numFactura').textContent = '1775';
+           document.getElementById('fecha').textContent = '15/09/2025';
+           document.getElementById('total').textContent = '238,16 €';
+         });*/
+    </script>
+
+</body>
+
+</html>
