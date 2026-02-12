@@ -96,9 +96,9 @@
                 });
                 
                 console.log("Status:" + res.status)
-                console.log(res)
 
                 const text = await res.text()
+                console.log(text)
                 if (!text) {
                     console.log("Respuesta vacia del servidor")
                     return
