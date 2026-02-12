@@ -88,45 +88,124 @@
             formData.append('file', file)
 
             try {
-                const res = await fetch(N8N_WEBHOOK_URL, {
+                const res = await fetch("http://localhost:5678/webhook-test/n8n-demo", {
                     method: "POST",
                     body: formData
                 });
 
-                console.log('Status:', res.status);
-                const data = await res.json();
-                showInvoiceOnPage(data)
+                const text = await res.text()
+                if (!text) {
+                    console.log("Respuesta vacia del servidor")
+                    return
+                }
+
+                const data = JSON.parse(text)
+                const invoice = Array.isArray(data) ? data[0] : data;
+                showInvoiceOnPage(invoice)
             } catch (error) {
                 console.log("Error: " + error);
                 alert("No se pudo procesar la factura")
             }
         }
 
-        function showInvoiceOnPage(data) {
-            document.getElementById('invoiceNumber').textContent = data.invoice_number || '-';
-            document.getElementById('invoiceDate').textContent = data.invoice_date || '-';
-            document.getElementById('supplierNIF').textContent = data.supplier_nif || '-';
-            document.getElementById('total').textContent = data.total?.toFixed(2) || '-';
+        function formatMoney(n) {
+            if (n === null || n === undefined || isNaN(n)) return "-";
+            return Number(n).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
+        }
 
+        function safeNum(n) {
+            if (n === null || n === undefined) return null;
+            const v = Number(n);
+            return isNaN(v) ? null : v;
+        }
+
+        function showInvoiceOnPage(data) {
+            // Si te pasan un array, tomar el primer elemento
+            const invoice = Array.isArray(data) ? data[0] : data;
+
+            // Cabecera / meta
+            document.getElementById('invoiceNumber').textContent = invoice.invoice_number || '-';
+            document.getElementById('invoiceDate').textContent = invoice.invoice_date || '-';
+            document.getElementById('supplierNIF').textContent = invoice.supplier_nif || '-';
+
+            // Totales visibles
+            const subtotal = safeNum(invoice.subtotal);
+            const tax_total = safeNum(invoice.tax_total);
+            const total = safeNum(invoice.total);
+
+            document.getElementById('total').textContent = formatMoney(total);
+
+            // Si quieres mostrar subtotal / IVA también (añade elementos en HTML si no existen)
+            // Ejemplo: <span id="subtotal"></span> <span id="taxTotal"></span>
+            if (document.getElementById('subtotal')) {
+                document.getElementById('subtotal').textContent = formatMoney(subtotal);
+            }
+            if (document.getElementById('taxTotal')) {
+                document.getElementById('taxTotal').textContent = formatMoney(tax_total);
+            }
+
+            // Tabla line items
             const tbody = document.querySelector('#lineItemsTable tbody');
             tbody.innerHTML = ''; // limpiar antes de rellenar
 
-            if (data.line_items && data.line_items.length > 0) {
-                data.line_items.forEach(item => {
+            if (invoice.line_items && invoice.line_items.length > 0) {
+                invoice.line_items.forEach(item => {
+                    // normalizar campos
+                    const desc = item.description ? String(item.description).trim() : '-';
+                    const qty = (item.quantity !== null && item.quantity !== undefined) ? item.quantity : '-';
+                    const unit = safeNum(item.unit_price);
+                    const vat_rate = (item.vat_rate !== null && item.vat_rate !== undefined) ? item.vat_rate : '-';
+                    const vat_amount = safeNum(item.vat_amount);
+                    const line_total = safeNum(item.line_total_incl ?? item.line_total ?? item.line_total_incl);
+
                     const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                <td>${item.description || '-'}</td>
-                <td>${item.quantity || '-'}</td>
-                <td>${item.unit_price?.toFixed(2) || '-'}</td>
-                <td>${item.vat_rate || 0}</td>
-                <td>${item.vat_amount?.toFixed(2) || 0}</td>
-                <td>${item.line_total_incl?.toFixed(2) || 0}</td>
-            `;
+
+                    // create cells with data-label for mobile friendly layout
+                    const tdDesc = document.createElement('td');
+                    tdDesc.setAttribute('data-label', 'Descripción');
+                    tdDesc.textContent = desc;
+
+                    const tdQty = document.createElement('td');
+                    tdQty.setAttribute('data-label', 'Cantidad');
+                    tdQty.textContent = qty;
+
+                    const tdUnit = document.createElement('td');
+                    tdUnit.setAttribute('data-label', 'Precio unitario');
+                    tdUnit.textContent = unit !== null ? formatMoney(unit) : '-';
+
+                    const tdVatRate = document.createElement('td');
+                    tdVatRate.setAttribute('data-label', 'IVA (%)');
+                    tdVatRate.textContent = vat_rate === '-' ? '-' : String(vat_rate);
+
+                    const tdVatAmount = document.createElement('td');
+                    tdVatAmount.setAttribute('data-label', 'IVA (€)');
+                    tdVatAmount.textContent = vat_amount !== null ? formatMoney(vat_amount) : '-';
+
+                    const tdTotal = document.createElement('td');
+                    tdTotal.setAttribute('data-label', 'Total (€)');
+                    tdTotal.textContent = line_total !== null ? formatMoney(line_total) : '-';
+
+                    tr.appendChild(tdDesc);
+                    tr.appendChild(tdQty);
+                    tr.appendChild(tdUnit);
+                    tr.appendChild(tdVatRate);
+                    tr.appendChild(tdVatAmount);
+                    tr.appendChild(tdTotal);
+
                     tbody.appendChild(tr);
                 });
+            } else {
+                // Mensaje cuando no hay items
+                const tr = document.createElement('tr');
+                const td = document.createElement('td');
+                td.setAttribute('colspan', 6);
+                td.textContent = 'No se han detectado líneas de producto.';
+                td.style.textAlign = 'center';
+                tr.appendChild(td);
+                tbody.appendChild(tr);
             }
 
-            // Mostrar la sección de resultados
+            // mostrar
             document.getElementById('result').classList.remove('hidden');
         }
 
