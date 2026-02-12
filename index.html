@@ -32,18 +32,28 @@
         <div id="result" class="result hidden">
             <h2>Resultado</h2>
 
-            <!--<div class="result-grid">
-                <div><span>Proveedor</span><strong id="empresa"></strong></div>
-                <div><span>Nº Factura</span><strong id="numFactura"></strong></div>
-                <div><span>Fecha</span><strong id="fecha"></strong></div>
-                <div><span>Total</span><strong id="total"></strong></div>
-            </div>-->
             <div>
                 <p>Factura Nº: <span id="invoiceNumber"></span></p>
                 <p>Fecha: <span id="invoiceDate"></span></p>
                 <p>NIF: <span id="supplierNIF"></span></p>
                 <p>Total: <span id="total"></span></p>
             </div>
+
+            <h3>Line Items</h3>
+            <table id="lineItemsTable">
+                <thead>
+                    <tr>
+                        <th>Descripción</th>
+                        <th>Cantidad</th>
+                        <th>Precio Unitario</th>
+                        <th>IVA (%)</th>
+                        <th>IVA (€)</th>
+                        <th>Total (€)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
         </div>
 
         <footer>
@@ -84,22 +94,42 @@
                 });
 
                 console.log('Status:', res.status);
-                const text = await res.text();
-                console.log('Response:', text);
+                const data = await res.json();
+                showInvoiceOnPage(data)
             } catch (error) {
                 console.log("Error: " + error);
+                alert("No se pudo procesar la factura")
             }
         }
 
-        // Demo fake (luego aquí llamas a tu webhook)
-        /*processBtn.addEventListener('click', () => {
-           document.getElementById('result').classList.remove('hidden');
-     
-           document.getElementById('empresa').textContent = 'ESADE, S.L.';
-           document.getElementById('numFactura').textContent = '1775';
-           document.getElementById('fecha').textContent = '15/09/2025';
-           document.getElementById('total').textContent = '238,16 €';
-         });*/
+        function showInvoiceOnPage(data) {
+            document.getElementById('invoiceNumber').textContent = data.invoice_number || '-';
+            document.getElementById('invoiceDate').textContent = data.invoice_date || '-';
+            document.getElementById('supplierNIF').textContent = data.supplier_nif || '-';
+            document.getElementById('total').textContent = data.total?.toFixed(2) || '-';
+
+            const tbody = document.querySelector('#lineItemsTable tbody');
+            tbody.innerHTML = ''; // limpiar antes de rellenar
+
+            if (data.line_items && data.line_items.length > 0) {
+                data.line_items.forEach(item => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                <td>${item.description || '-'}</td>
+                <td>${item.quantity || '-'}</td>
+                <td>${item.unit_price?.toFixed(2) || '-'}</td>
+                <td>${item.vat_rate || 0}</td>
+                <td>${item.vat_amount?.toFixed(2) || 0}</td>
+                <td>${item.line_total_incl?.toFixed(2) || 0}</td>
+            `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            // Mostrar la sección de resultados
+            document.getElementById('result').classList.remove('hidden');
+        }
+
     </script>
 
 </body>
