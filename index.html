@@ -67,6 +67,7 @@
         const processBtn = document.getElementById('processBtn');
         //Cambiar por la url real de n8n publicada
         const N8N_WEBHOOK_URL = "https://n8n-facturas-demo.onrender.com/webhook/n8n-demo";
+        const RED_LOCAL = "http://localhost:5678/webhook-test/n8n-demo";
 
         fileInput.addEventListener('change', () => {
             if (fileInput.files.length > 0) {
@@ -88,7 +89,7 @@
             formData.append('file', file)
 
             try {
-                const res = await fetch("http://localhost:5678/webhook-test/n8n-demo", {
+                const res = await fetch(N8N_WEBHOOK_URL, {
                     method: "POST",
                     body: formData
                 });
