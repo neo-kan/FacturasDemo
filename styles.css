@@ -60,3 +60,29 @@
 /* Row hover */
 #lineItemsTable tbody tr:hover { background:#fbfcfe; }
 
+/* Small screens: tabla responsive (cada celda se convierte en fila) */
+@media (max-width: 720px) {
+  .invoice-header { flex-direction: column; gap: 12px; }
+  .invoice-meta { grid-template-columns: 1fr; }
+  .totals { width:100%; text-align:left; }
+
+  #lineItemsTable, #lineItemsTable thead, #lineItemsTable tbody, #lineItemsTable th, #lineItemsTable td, #lineItemsTable tr {
+    display:block;
+  }
+  #lineItemsTable thead { display:none; }
+  #lineItemsTable tr { margin-bottom: 12px; background: #fff; border-radius: 8px; padding: 8px; box-shadow: 0 2px 6px rgba(15,23,42,0.03);}
+  #lineItemsTable td {
+    padding: 8px 10px;
+    border: none;
+    display: flex;
+    justify-content: space-between;
+  }
+  /* label in the left using data-label attribute */
+  #lineItemsTable td::before {
+    content: attr(data-label);
+    font-weight:600;
+    color:#6b7280;
+    display:inline-block;
+    margin-right: 8px;
+  }
+}
