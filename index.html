@@ -94,6 +94,9 @@
                     method: "POST",
                     body: formData
                 });
+                
+                console.log("Status:" + res.status)
+                console.log("Respuesta: " + res)
 
                 const text = await res.text()
                 if (!text) {
