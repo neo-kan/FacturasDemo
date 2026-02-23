@@ -1,220 +1,197 @@
 <!DOCTYPE html>
 <html lang="es">
-
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Demo · Automatización de Facturas</title>
-    <link rel="stylesheet" href="https://facturas-demo.onrender.com/styles2.css" />
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Demo · Confirmación de Factura</title>
+<style>
+/* --- CSS BASE --- */
+* { box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f5f7fb; margin: 0; padding: 0; color: #1f2937;
+}
+.container { max-width: 600px; margin: 40px auto; padding: 20px; }
+h1 { text-align: center; margin-bottom: 16px; }
+.upload-card, .result, #confirmForm { background: #fff; border-radius: 14px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); margin-bottom: 24px; }
+.upload-button, button { display: inline-block; background: #2563eb; color: #fff; padding: 12px 20px; border-radius: 10px; cursor: pointer; font-weight: 600; transition: 0.2s; border: none; }
+.upload-button:hover, button:hover { background: #1e40af; }
+button:disabled { background: #9ca3af; cursor: not-allowed; }
+.file-name { margin: 12px 0; font-size: 14px; color: #6b7280; }
+
+/* --- FORMULARIO RESPONSIVE --- */
+#confirmForm { display: grid; gap: 16px; }
+#confirmForm .form-group { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
+#confirmForm label { display: flex; flex-direction: column; font-size: 14px; color: #374151; }
+#confirmForm input { padding: 6px 8px; font-size: 14px; border: 1px solid #d1d5db; border-radius: 6px; width: 100%; }
+
+/* TABLA LINE ITEMS */
+#lineItemsTable { width: 100%; border-collapse: collapse; margin-top: 12px; table-layout: fixed; }
+#lineItemsTable th, #lineItemsTable td { padding: 8px 6px; border: 1px solid #e6e6e6; text-align: left; font-size: 13px; }
+#lineItemsTable input { width: 100%; padding: 4px 6px; font-size: 13px; border-radius: 4px; }
+
+/* Scroll horizontal en móviles */
+@media (max-width: 640px) { #lineItemsTable { display: block; overflow-x: auto; } }
+
+/* Loader */
+#loader {
+  display: none;
+  text-align: center;
+  margin: 24px 0;
+}
+.spinner {
+  border: 6px solid #f3f3f3;
+  border-top: 6px solid #2563eb;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin: 0 auto;
+}
+@keyframes spin { 100% { transform: rotate(360deg); } }
+
+/* Footer */
+footer { text-align: center; font-size: 12px; color: #9ca3af; margin-top: 16px; }
+.hidden { display: none; }
+</style>
 </head>
 
 <body>
+<div class="container">
+  <h1>Confirmación de Factura</h1>
 
-    <div class="container">
-        <h1>Automatización de Facturas</h1>
-        <p class="subtitle">
-            Sube una factura (PDF o imagen) y obtén automáticamente los datos contables.
-        </p>
+  <div class="upload-card">
+    <input type="file" id="fileInput" accept=".pdf,image/*" hidden />
+    <label for="fileInput" class="upload-button">📄 Subir factura</label>
+    <p id="fileName" class="file-name">Ningún archivo seleccionado</p>
+    <button id="processBtn" disabled>Procesar factura</button>
+  </div>
 
-        <div class="upload-card">
-            <input type="file" id="fileInput" accept=".pdf,image/*" hidden />
-            <label for="fileInput" class="upload-button">
-                📄 Subir factura
-            </label>
+  <div id="loader">
+    <div class="spinner"></div>
+    <p>Procesando factura, por favor espere...</p>
+  </div>
 
-            <p id="fileName" class="file-name">Ningún archivo seleccionado</p>
-
-            <button id="processBtn" disabled>
-                Procesar factura
-            </button>
-        </div>
-
-        <div id="result" class="result hidden">
-            <h2>Resultado</h2>
-
-            <div>
-                <p>Factura Nº: <span id="invoiceNumber"></span></p>
-                <p>Fecha: <span id="invoiceDate"></span></p>
-                <p>NIF: <span id="supplierNIF"></span></p>
-                <p>Total: <span id="total"></span></p>
-            </div>
-
-            <h3>Line Items</h3>
-            <table id="lineItemsTable">
-                <thead>
-                    <tr>
-                        <th>Descripción</th>
-                        <th>Cantidad</th>
-                        <th>Precio Unitario</th>
-                        <th>IVA (%)</th>
-                        <th>IVA (€)</th>
-                        <th>Total (€)</th>
-                    </tr>
-                </thead>
-                <tbody>
-                </tbody>
-            </table>
-        </div>
-
-        <footer>
-            <span>Demo técnica · No se almacenan documentos</span>
-        </footer>
+  <form id="confirmForm" class="hidden">
+    <div class="form-group">
+      <label>Factura Nº <input type="text" id="invoiceNumber" /></label>
+      <label>Fecha <input type="text" id="invoiceDate" /></label>
+      <label>NIF <input type="text" id="supplierNIF" /></label>
+      <label>Total <input type="text" id="total" /></label>
     </div>
 
-    <script>
-        const fileInput = document.getElementById('fileInput');
-        const fileName = document.getElementById('fileName');
-        const processBtn = document.getElementById('processBtn');
-        //Cambiar por la url real de n8n publicada
-        const N8N_WEBHOOK_URL = "https://n8n-facturas-demo.onrender.com/webhook/n8n-demo";
-        const RED_LOCAL = "http://localhost:5678/webhook-test/n8n-demo";
+    <table id="lineItemsTable">
+      <thead>
+        <tr>
+          <th>Descripción</th>
+          <th>Cantidad</th>
+          <th>Precio Unitario</th>
+          <th>IVA (%)</th>
+          <th>IVA (€)</th>
+          <th>Total (€)</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
 
-        fileInput.addEventListener('change', () => {
-            if (fileInput.files.length > 0) {
-                fileName.textContent = fileInput.files[0].name;
-                processBtn.disabled = false;
-            } else {
-                fileName.textContent = 'Ningún archivo seleccionado';
-                processBtn.disabled = true;
-            }
-        });
+    <button type="button" id="downloadExcelBtn">📥 Descargar Excel</button>
+  </form>
 
-        processBtn.addEventListener('click', () => {
-            let file = fileInput.files[0]
-            conectionWorkflow(file)
-        })
+  <footer>Demo técnica · No se almacenan documentos</footer>
+</div>
 
-        async function conectionWorkflow(file) {
-            const formData = new FormData()
-            formData.append('file', file)
+<script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+<script>
+// --- VARIABLES ---
+const fileInput = document.getElementById('fileInput');
+const fileName = document.getElementById('fileName');
+const processBtn = document.getElementById('processBtn');
+const confirmForm = document.getElementById('confirmForm');
+const loader = document.getElementById('loader');
+const N8N_WEBHOOK_URL = "http://localhost:5678/webhook-test/n8n-demo";
 
-            try {
-                const res = await fetch(N8N_WEBHOOK_URL, {
-                    method: "POST",
-                    body: formData
-                });
-                
-                console.log("Status:" + res.status)
+// --- SUBIDA ---
+fileInput.addEventListener('change', () => {
+  if(fileInput.files.length>0) {
+    fileName.textContent = fileInput.files[0].name;
+    processBtn.disabled = false;
+  } else {
+    fileName.textContent = 'Ningún archivo seleccionado';
+    processBtn.disabled = true;
+  }
+});
 
-                const text = await res.text()
-                console.log(text)
-                if (!text) {
-                    console.log("Respuesta vacia del servidor")
-                    return
-                }
+// --- PROCESAR FACTURA ---
+processBtn.addEventListener('click', async () => {
+  const file = fileInput.files[0];
+  if(!file) return;
 
-                const data = JSON.parse(text)
-                const invoice = Array.isArray(data) ? data[0] : data;
-                showInvoiceOnPage(invoice)
-            } catch (error) {
-                console.log("Error: " + error);
-                alert("No se pudo procesar la factura")
-            }
-        }
+  confirmForm.classList.add('hidden');
+  loader.style.display = 'block';
 
-        function formatMoney(n) {
-            if (n === null || n === undefined || isNaN(n)) return "-";
-            return Number(n).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
-        }
+  const formData = new FormData();
+  formData.append('file', file);
 
-        function safeNum(n) {
-            if (n === null || n === undefined) return null;
-            const v = Number(n);
-            return isNaN(v) ? null : v;
-        }
+  try {
+    const res = await fetch(N8N_WEBHOOK_URL, { method: "POST", body: formData });
+    const text = await res.text();
+    if(!text) throw "Respuesta vacía";
+    const data = JSON.parse(text);
+    showInvoiceOnPage(Array.isArray(data)?data[0]:data);
+  } catch(e) { alert("Error: "+e); }
+  loader.style.display = 'none';
+});
 
-        function showInvoiceOnPage(data) {
-            // Si te pasan un array, tomar el primer elemento
-            const invoice = Array.isArray(data) ? data[0] : data;
+// --- RENDERIZAR DATOS ---
+function showInvoiceOnPage(invoice){
+  confirmForm.classList.remove('hidden');
+  document.getElementById('invoiceNumber').value = invoice.invoice_number || '';
+  document.getElementById('invoiceDate').value = invoice.invoice_date || '';
+  document.getElementById('supplierNIF').value = invoice.supplier_nif || '';
+  document.getElementById('total').value = invoice.total || '';
 
-            // Cabecera / meta
-            document.getElementById('invoiceNumber').textContent = invoice.invoice_number || '-';
-            document.getElementById('invoiceDate').textContent = invoice.invoice_date || '-';
-            document.getElementById('supplierNIF').textContent = invoice.supplier_nif || '-';
+  const tbody = document.querySelector('#lineItemsTable tbody');
+  tbody.innerHTML = '';
+  if(invoice.line_items?.length>0){
+    invoice.line_items.forEach(item=>{
+      const tr = document.createElement('tr');
+      const vals = [
+        item.description||'',
+        item.quantity??'',
+        item.unit_price??'',
+        item.vat_rate??'',
+        item.vat_amount??'',
+        item.line_total_incl??''
+      ];
+      vals.forEach(v=>{
+        const td = document.createElement('td');
+        const input = document.createElement('input');
+        input.value = v;
+        td.appendChild(input);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+  }
+}
 
-            // Totales visibles
-            const subtotal = safeNum(invoice.subtotal);
-            const tax_total = safeNum(invoice.tax_total);
-            const total = safeNum(invoice.total);
+// --- DESCARGAR EXCEL ---
+document.getElementById('downloadExcelBtn').addEventListener('click', ()=>{
+  const wb = XLSX.utils.book_new();
+  const ws_data = [];
+  const header = ['Descripción','Cantidad','Precio Unitario','IVA (%)','IVA (€)','Total (€)'];
+  ws_data.push(header);
 
-            document.getElementById('total').textContent = formatMoney(total);
+  document.querySelectorAll('#lineItemsTable tbody tr').forEach(tr=>{
+    const row = [];
+    tr.querySelectorAll('input').forEach(inp=>row.push(inp.value));
+    ws_data.push(row);
+  });
 
-            // Si quieres mostrar subtotal / IVA también (añade elementos en HTML si no existen)
-            // Ejemplo: <span id="subtotal"></span> <span id="taxTotal"></span>
-            if (document.getElementById('subtotal')) {
-                document.getElementById('subtotal').textContent = formatMoney(subtotal);
-            }
-            if (document.getElementById('taxTotal')) {
-                document.getElementById('taxTotal').textContent = formatMoney(tax_total);
-            }
-
-            // Tabla line items
-            const tbody = document.querySelector('#lineItemsTable tbody');
-            tbody.innerHTML = ''; // limpiar antes de rellenar
-
-            if (invoice.line_items && invoice.line_items.length > 0) {
-                invoice.line_items.forEach(item => {
-                    // normalizar campos
-                    const desc = item.description ? String(item.description).trim() : '-';
-                    const qty = (item.quantity !== null && item.quantity !== undefined) ? item.quantity : '-';
-                    const unit = safeNum(item.unit_price);
-                    const vat_rate = (item.vat_rate !== null && item.vat_rate !== undefined) ? item.vat_rate : '-';
-                    const vat_amount = safeNum(item.vat_amount);
-                    const line_total = safeNum(item.line_total_incl ?? item.line_total ?? item.line_total_incl);
-
-                    const tr = document.createElement('tr');
-
-                    // create cells with data-label for mobile friendly layout
-                    const tdDesc = document.createElement('td');
-                    tdDesc.setAttribute('data-label', 'Descripción');
-                    tdDesc.textContent = desc;
-
-                    const tdQty = document.createElement('td');
-                    tdQty.setAttribute('data-label', 'Cantidad');
-                    tdQty.textContent = qty;
-
-                    const tdUnit = document.createElement('td');
-                    tdUnit.setAttribute('data-label', 'Precio unitario');
-                    tdUnit.textContent = unit !== null ? formatMoney(unit) : '-';
-
-                    const tdVatRate = document.createElement('td');
-                    tdVatRate.setAttribute('data-label', 'IVA (%)');
-                    tdVatRate.textContent = vat_rate === '-' ? '-' : String(vat_rate);
-
-                    const tdVatAmount = document.createElement('td');
-                    tdVatAmount.setAttribute('data-label', 'IVA (€)');
-                    tdVatAmount.textContent = vat_amount !== null ? formatMoney(vat_amount) : '-';
-
-                    const tdTotal = document.createElement('td');
-                    tdTotal.setAttribute('data-label', 'Total (€)');
-                    tdTotal.textContent = line_total !== null ? formatMoney(line_total) : '-';
-
-                    tr.appendChild(tdDesc);
-                    tr.appendChild(tdQty);
-                    tr.appendChild(tdUnit);
-                    tr.appendChild(tdVatRate);
-                    tr.appendChild(tdVatAmount);
-                    tr.appendChild(tdTotal);
-
-                    tbody.appendChild(tr);
-                });
-            } else {
-                // Mensaje cuando no hay items
-                const tr = document.createElement('tr');
-                const td = document.createElement('td');
-                td.setAttribute('colspan', 6);
-                td.textContent = 'No se han detectado líneas de producto.';
-                td.style.textAlign = 'center';
-                tr.appendChild(td);
-                tbody.appendChild(tr);
-            }
-
-            // mostrar
-            document.getElementById('result').classList.remove('hidden');
-        }
-
-    </script>
-
+  const ws = XLSX.utils.aoa_to_sheet(ws_data);
+  XLSX.utils.book_append_sheet(wb, ws, 'LineItems');
+  XLSX.writeFile(wb, 'factura.xlsx');
+});
+</script>
 </body>
-
 </html>

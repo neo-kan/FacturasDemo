@@ -1,3 +1,4 @@
+/* --- BASE EXISTENTE --- */
 * {
   box-sizing: border-box;
 }
@@ -114,4 +115,117 @@ footer {
   text-align: center;
   font-size: 12px;
   color: #9ca3af;
+}
+
+/* --- NUEVO CSS PARA FORMULARIO EDITABLE RESPONSIVE --- */
+#confirmForm {
+  display: grid;
+  gap: 16px;
+}
+
+/* Cabecera editable */
+#confirmForm > div {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+#confirmForm label {
+  display: flex;
+  flex-direction: column;
+  font-size: 14px;
+  color: #374151;
+}
+
+#confirmForm input {
+  padding: 6px 8px;
+  font-size: 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+}
+
+/* Tabla line items scrollable */
+#confirmForm table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+  table-layout: fixed;
+}
+
+#confirmForm th, #confirmForm td {
+  padding: 8px 6px;
+  border: 1px solid #e6e6e6;
+  text-align: left;
+  vertical-align: middle;
+  font-size: 13px;
+}
+
+#confirmForm td input {
+  width: 100%;
+  padding: 4px 6px;
+  font-size: 13px;
+  border-radius: 4px;
+}
+
+#confirmForm td .small-btn {
+  font-size: 12px;
+  padding: 4px 6px;
+}
+
+/* Tabla scroll en móvil */
+@media (max-width: 640px) {
+  #confirmForm table {
+    display: block;
+    overflow-x: auto;
+  }
+}
+
+/* Totales resumen */
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.summary div {
+  flex: 1 1 120px;
+}
+
+.summary div .muted {
+  font-size: 12px;
+}
+
+/* Badge de estado */
+.ok-badge, .warn-badge {
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.ok-badge { color: #155724; background:#d4edda; }
+.warn-badge { color: #856404; background:#fff3cd; }
+
+/* Acciones de botones */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.actions button {
+  flex: 1 1 120px;
+}
+
+/* Marcar filas cambiadas */
+tr.changed input {
+  background: #fff7d6;
+}
+
+/* Mensajes feedback */
+#feedback {
+  font-size: 13px;
+  color: #374151;
 }
