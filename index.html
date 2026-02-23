@@ -216,9 +216,8 @@
         const processBtn = document.getElementById('processBtn');
         const confirmForm = document.getElementById('confirmForm');
         const loader = document.getElementById('loader');
-
-        // --- Ahora apuntamos al proxy backend ---
-        const N8N_WEBHOOK_URL = "/api/n8n-webhook"; // <-- tu backend Node.js
+        const N8N_WEBHOOK_URL = "https://n8n-facturas-demo.onrender.com/webhook/n8n-demo";
+        const N8N_LOCAL = "http://localhost:5678/webhook-test/n8n-demo";
 
         // --- SUBIDA ---
         fileInput.addEventListener('change', () => {
@@ -244,7 +243,6 @@
 
             try {
                 const res = await fetch(N8N_WEBHOOK_URL, { method: "POST", body: formData });
-                if (!res.ok) throw `Error ${res.status}`;
                 const text = await res.text();
                 if (!text) throw "Respuesta vacía";
                 const data = JSON.parse(text);
