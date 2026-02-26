@@ -194,8 +194,8 @@
                         <th>Descripción</th>
                         <th>Cantidad</th>
                         <th>Precio Unitario</th>
-                        <th>IVA (%)</th>
-                        <th>IVA (€)</th>
+                        <!-- <th>IVA (%)</th>
+                        <th>IVA (€)</th> -->
                         <th>Total (€)</th>
                     </tr>
                 </thead>
@@ -216,8 +216,8 @@
         const processBtn = document.getElementById('processBtn');
         const confirmForm = document.getElementById('confirmForm');
         const loader = document.getElementById('loader');
-        const N8N_WEBHOOK_URL = "https://n8n-facturas-demo.onrender.com/webhook/n8n-demo";
-        const N8N_LOCAL = "http://localhost:5678/webhook-test/n8n-demo";
+        const N8N_WEBHOOK_URL = "https://n8n-facturas-demo.onrender.com/webhook/google-doc-ai";
+        const N8N_LOCAL = "http://localhost:5678/webhook-test/google-doc-ai ";
 
         // --- SUBIDA ---
         fileInput.addEventListener('change', () => {
@@ -242,7 +242,7 @@
             formData.append('file', file);
 
             try {
-                const res = await fetch(N8N_WEBHOOK_URL, { method: "POST", body: formData });
+                const res = await fetch(N8N_LOCAL, { method: "POST", body: formData });
                 const text = await res.text();
                 if (!text) throw "Respuesta vacía";
                 const data = JSON.parse(text);
@@ -254,10 +254,10 @@
         // --- RENDERIZAR DATOS ---
         function showInvoiceOnPage(invoice) {
             confirmForm.classList.remove('hidden');
-            document.getElementById('invoiceNumber').value = invoice.invoice_number || '';
+            document.getElementById('invoiceNumber').value = invoice.invoice_id || '';
             document.getElementById('invoiceDate').value = invoice.invoice_date || '';
-            document.getElementById('supplierNIF').value = invoice.supplier_nif || '';
-            document.getElementById('total').value = invoice.total || '';
+            document.getElementById('supplierNIF').value = invoice.supplier_tax_id || '';
+            document.getElementById('total').value = invoice.total_amount   || '';
 
             const tbody = document.querySelector('#lineItemsTable tbody');
             tbody.innerHTML = '';
@@ -268,9 +268,9 @@
                         item.description || '',
                         item.quantity ?? '',
                         item.unit_price ?? '',
-                        item.vat_rate ?? '',
-                        item.vat_amount ?? '',
-                        item.line_total_incl ?? ''
+                        //item.vat_rate ?? '',
+                        //item.vat_amount ?? '',
+                        item.amount ?? ''
                     ];
                     vals.forEach(v => {
                         const td = document.createElement('td');
