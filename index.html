@@ -69,7 +69,6 @@
             color: #6b7280;
         }
 
-        /* --- FORMULARIO RESPONSIVE --- */
         #confirmForm {
             display: grid;
             gap: 16px;
@@ -96,7 +95,6 @@
             width: 100%;
         }
 
-        /* TABLA LINE ITEMS */
         #lineItemsTable {
             width: 100%;
             border-collapse: collapse;
@@ -119,15 +117,13 @@
             border-radius: 4px;
         }
 
-        /* Scroll horizontal en móviles */
-        @media (max-width: 640px) {
+        @media (max-width:640px) {
             #lineItemsTable {
                 display: block;
                 overflow-x: auto;
             }
         }
 
-        /* Loader */
         #loader {
             display: none;
             text-align: center;
@@ -150,7 +146,6 @@
             }
         }
 
-        /* Footer */
         footer {
             text-align: center;
             font-size: 12px;
@@ -169,7 +164,7 @@
         <h1>Confirmación de Factura</h1>
 
         <div class="upload-card">
-            <input type="file" id="fileInput" accept=".pdf,image/*" hidden />
+            <input type="file" id="fileInput" accept=".pdf,image/*" multiple hidden />
             <label for="fileInput" class="upload-button">📄 Subir factura</label>
             <p id="fileName" class="file-name">Ningún archivo seleccionado</p>
             <button id="processBtn" disabled>Procesar factura</button>
@@ -178,6 +173,16 @@
         <div id="loader">
             <div class="spinner"></div>
             <p>Procesando factura, por favor espere...</p>
+        </div>
+
+        <!-- Contenedor para mostrar resultados en la página -->
+        <div id="resultsContainer" class="hidden">
+            <div id="resultsNav" style="display:flex; gap:10px; margin-bottom:12px; align-items:center;">
+                <button id="prevResultBtn" class="upload-button" style="background:#94a3b8;">← Anterior</button>
+                <button id="nextResultBtn" class="upload-button">Siguiente →</button>
+                <div id="resultInfo" style="margin-left:12px; font-size:13px; color:#374151;"></div>
+            </div>
+            <div id="resultContent" style="width:100%; min-height:200px;"></div>
         </div>
 
         <form id="confirmForm" class="hidden">
@@ -189,16 +194,6 @@
             </div>
 
             <table id="lineItemsTable">
-                <thead>
-                    <tr>
-                        <th>Descripción</th>
-                        <th>Cantidad</th>
-                        <th>Precio Unitario</th>
-                        <!-- <th>IVA (%)</th>
-                        <th>IVA (€)</th> -->
-                        <th>Total (€)</th>
-                    </tr>
-                </thead>
                 <tbody></tbody>
             </table>
 
@@ -208,83 +203,378 @@
         <footer>Demo técnica · No se almacenan documentos</footer>
     </div>
 
-    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <!-- SweetAlert (solo se sigue usando para el modal de progreso mientras procesa) -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <!-- pdf-lib (para dividir PDF) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+
+    <!-- pdf.js (para miniaturas) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>
-        // --- VARIABLES ---
+        // configuramos worker UNA sola vez
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+            "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    </script>
+
+    <!-- XLSX -->
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+
+    <script>
+        console.log("pdf.js version:", pdfjsLib.version);
+
+        /* Variables globales */
         const fileInput = document.getElementById('fileInput');
         const fileName = document.getElementById('fileName');
         const processBtn = document.getElementById('processBtn');
         const confirmForm = document.getElementById('confirmForm');
         const loader = document.getElementById('loader');
-        const N8N_WEBHOOK_URL = "https://n8n-facturas-demo.onrender.com/webhook/google-doc-ai";
-        const N8N_LOCAL = "http://localhost:5678/webhook-test/google-doc-ai ";
 
-        // --- SUBIDA ---
-        fileInput.addEventListener('change', () => {
-            if (fileInput.files.length > 0) {
-                fileName.textContent = fileInput.files[0].name;
-                processBtn.disabled = false;
-            } else {
+        const N8N_WEBHOOK_URL = "https://n8n-facturas-demo.onrender.com/webhook/google-doc-ai";
+        const N8N_LOCAL = "http://localhost:5678/webhook-test/google-doc-ai";
+
+        let fileGen = null;            // File único (PDF) o array de Files (imágenes)
+        let type = "";
+        let listaDocumentos = [];      // índices base0 de páginas seleccionadas (para PDF)
+        let processingQueue = [];      // { blob, name, sourceType, meta }
+        let processingResults = [];    // respuestas del workflow
+        let currentIndex = 0;
+
+        // Reset visual results container
+        function resetResultsUI() {
+            document.getElementById('resultsContainer').classList.add('hidden');
+            confirmForm.classList.add('hidden');
+            document.getElementById('resultInfo').innerText = '';
+            document.querySelector('#lineItemsTable tbody').innerHTML = '';
+            currentIndex = 0;
+            processingResults = [];
+        }
+
+        /* --- SUBIDA --- */
+        fileInput.addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files); // convertir FileList a array
+            fileGen = null;
+            listaDocumentos = [];
+            processingQueue = [];
+            processingResults = [];
+            resetResultsUI();
+
+            if (!files.length) {
                 fileName.textContent = 'Ningún archivo seleccionado';
                 processBtn.disabled = true;
+                return;
+            }
+
+            // Separar PDFs e imágenes
+            const pdfFiles = files.filter(f => f.type === "application/pdf");
+            const imageFiles = files.filter(f => f.type.startsWith("image/"));
+
+            // Solo permitimos 1 PDF
+            if (pdfFiles.length > 1) {
+                Swal.fire("Aviso", "Solo puedes subir un PDF a la vez.", "warning");
+                fileInput.value = "";
+                return;
+            }
+
+            // Preparar PDF
+            if (pdfFiles.length === 1) {
+                fileGen = pdfFiles[0];
+                type = "application/pdf";
+                fileName.textContent = fileGen.name;
+                processBtn.disabled = false;
+
+                // Abrir selector de páginas
+                await selecionaPaginasPdf(fileGen);
+            }
+
+            // Preparar imágenes
+            if (imageFiles.length > 0) {
+                type = "image";
+                fileGen = imageFiles; // array de imágenes
+                fileName.textContent = imageFiles.map(f => f.name).join(", ");
+                processBtn.disabled = false;
             }
         });
 
-        // --- PROCESAR FACTURA ---
-        processBtn.addEventListener('click', async () => {
-            const file = fileInput.files[0];
-            if (!file) return;
-
-            confirmForm.classList.add('hidden');
-            loader.style.display = 'block';
-
-            const formData = new FormData();
-            formData.append('file', file);
+        /* --- SELECCIONAR PAGINAS PDF --- */
+        async function selecionaPaginasPdf(filePdf) {
+            Swal.fire({
+                title: "Abriendo PDF",
+                text: "Generando miniaturas...",
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
 
             try {
-                const res = await fetch(N8N_LOCAL, { method: "POST", body: formData });
-                const text = await res.text();
-                if (!text) throw "Respuesta vacía";
-                const data = JSON.parse(text);
-                showInvoiceOnPage(Array.isArray(data) ? data[0] : data);
-            } catch (e) { alert("Error: " + e); }
-            loader.style.display = 'none';
-        });
+                const arrayBuffer = await filePdf.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
-        // --- RENDERIZAR DATOS ---
-        function showInvoiceOnPage(invoice) {
-            confirmForm.classList.remove('hidden');
-            document.getElementById('invoiceNumber').value = invoice.invoice_id || '';
-            document.getElementById('invoiceDate').value = invoice.invoice_date || '';
-            document.getElementById('supplierNIF').value = invoice.supplier_tax_id || '';
-            document.getElementById('total').value = invoice.total_amount   || '';
+                const container = document.createElement("div");
+                container.style.display = "flex";
+                container.style.flexWrap = "wrap";
+                container.style.gap = "10px";
+                container.style.maxHeight = "420px";
+                container.style.overflow = "auto";
 
-            const tbody = document.querySelector('#lineItemsTable tbody');
-            tbody.innerHTML = '';
-            if (invoice.line_items?.length > 0) {
-                invoice.line_items.forEach(item => {
-                    const tr = document.createElement('tr');
-                    const vals = [
-                        item.description || '',
-                        item.quantity ?? '',
-                        item.unit_price ?? '',
-                        //item.vat_rate ?? '',
-                        //item.vat_amount ?? '',
-                        item.amount ?? ''
-                    ];
-                    vals.forEach(v => {
-                        const td = document.createElement('td');
-                        const input = document.createElement('input');
-                        input.value = v;
-                        td.appendChild(input);
-                        tr.appendChild(td);
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const viewport = page.getViewport({ scale: 0.2 });
+                    const canvas = document.createElement("canvas");
+                    canvas.width = viewport.width;
+                    canvas.height = viewport.height;
+                    await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+
+                    const checkbox = document.createElement("input");
+                    checkbox.type = "checkbox";
+                    checkbox.value = i;
+                    checkbox.style.display = "none";
+
+                    const wrapper = document.createElement("div");
+                    wrapper.style.border = "2px solid #ccc";
+                    wrapper.style.padding = "6px";
+                    wrapper.style.cursor = "pointer";
+                    wrapper.style.borderRadius = "6px";
+                    wrapper.style.display = "flex";
+                    wrapper.style.flexDirection = "column";
+                    wrapper.style.alignItems = "center";
+                    wrapper.style.background = "#fff";
+
+                    const label = document.createElement("div");
+                    label.style.marginTop = "6px";
+                    label.style.fontSize = "12px";
+                    label.style.color = "#333";
+                    label.innerText = `Página ${i}`;
+
+                    wrapper.appendChild(canvas);
+                    wrapper.appendChild(label);
+                    wrapper.appendChild(checkbox);
+
+                    wrapper.addEventListener("click", () => {
+                        checkbox.checked = !checkbox.checked;
+                        wrapper.style.border = checkbox.checked ? "2px solid #007bff" : "2px solid #ccc";
+                        wrapper.style.background = checkbox.checked ? "#e7f1ff" : "#fff";
                     });
-                    tbody.appendChild(tr);
+
+                    container.appendChild(wrapper);
+                }
+
+                const { value: selectedPages } = await Swal.fire({
+                    title: "Selecciona las páginas",
+                    html: container,
+                    width: "80%",
+                    showCancelButton: true,
+                    allowOutsideClick: false,
+                    allowEscapeKey: false,
+                    confirmButtonText: "Aceptar",
+                    preConfirm: () => {
+                        const checked = container.querySelectorAll("input:checked");
+                        if (checked.length === 0) {
+                            Swal.showValidationMessage("Selecciona al menos una página");
+                            return false;
+                        }
+                        return Array.from(checked).map(cb => parseInt(cb.value));
+                    }
                 });
+
+                if (selectedPages && selectedPages.length) {
+                    listaDocumentos = selectedPages.map(p => p - 1); // base0
+                    console.log("Páginas seleccionadas (base0):", listaDocumentos);
+                }
+            } catch (err) {
+                console.error("Error al generar miniaturas:", err);
+                Swal.fire("Error", "No se pudo abrir el PDF.", "error");
+                listaDocumentos = [];
+            } finally {
+                Swal.close();
             }
         }
 
-        // --- DESCARGAR EXCEL ---
+        /* --- PROCESAR FACTURA --- */
+        processBtn.addEventListener('click', async () => {
+            fileInput.value = '';
+
+            if (!fileGen) return;
+            processingQueue = [];
+            processingResults = [];
+
+            // Construir la cola
+            if (Array.isArray(fileGen)) {
+                // varias imágenes
+                fileGen.forEach(imgFile => {
+                    processingQueue.push({
+                        blob: imgFile,
+                        name: imgFile.name,
+                        sourceType: "image",
+                        meta: { originalName: imgFile.name }
+                    });
+                });
+            } else if (fileGen.type === "application/pdf") {
+                if (!listaDocumentos.length) {
+                    Swal.fire("Aviso", "No has seleccionado páginas para el PDF.", "warning");
+                    return;
+                }
+
+                try {
+                    const arrayBuffer = await fileGen.arrayBuffer();
+                    const pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer);
+                    for (const pageIndex of listaDocumentos) {
+                        const newPdf = await PDFLib.PDFDocument.create();
+                        const [copied] = await newPdf.copyPages(pdfDoc, [pageIndex]);
+                        newPdf.addPage(copied);
+                        const bytes = await newPdf.save();
+                        const blob = new Blob([bytes], { type: "application/pdf" });
+                        const name = `${fileGen.name.replace(/\.pdf$/i, '')}_p${pageIndex + 1}.pdf`;
+                        processingQueue.push({
+                            blob,
+                            name,
+                            sourceType: "pdf-page",
+                            meta: { originalName: fileGen.name, pageIndex }
+                        });
+                    }
+                } catch (err) {
+                    console.error("Error creando PDFs por página:", err);
+                    Swal.fire("Error", "No se pudo preparar el PDF para procesar.", "error");
+                    return;
+                }
+            } else {
+                Swal.fire("Tipo no soportado", "Solo PDFs e imágenes son soportados.", "warning");
+                return;
+            }
+
+            if (!processingQueue.length) {
+                Swal.fire("Nada que procesar", "No hay documentos en la cola.", "info");
+                return;
+            }
+
+            // Modal de progreso
+            const progressHtml = document.createElement('div');
+            progressHtml.style.textAlign = "center";
+            progressHtml.innerHTML = `
+        <div class="spinner" style="margin: 10px auto;"></div>
+        <div style="margin-top:12px;">
+          <div id="progressText">Procesando 0 / ${processingQueue.length}</div>
+          <div id="progressDetail" style="font-size:12px;color:#666;margin-top:6px;"></div>
+        </div>
+    `;
+            Swal.fire({
+                title: "Procesando documentos",
+                html: progressHtml,
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                showConfirmButton: false
+            });
+
+            // Enviar uno a uno
+            for (let i = 0; i < processingQueue.length; i++) {
+                const item = processingQueue[i];
+                const progressText = document.getElementById('progressText');
+                const progressDetail = document.getElementById('progressDetail');
+
+                if (progressText) progressText.innerText = `Procesando ${i + 1} / ${processingQueue.length}`;
+                if (progressDetail) progressDetail.innerText = `Enviando ${item.name}...`;
+
+                const formData = new FormData();
+                formData.append('file', item.blob, item.name);
+                formData.append('originalName', item.meta.originalName || '');
+                formData.append('pageIndex', (item.meta.pageIndex ?? ''));
+
+                try {
+                    const res = await fetch(N8N_LOCAL, { method: "POST", body: formData });
+                    const text = await res.text();
+                    let data;
+                    try { data = JSON.parse(text); } catch { data = { raw: text }; }
+
+                    processingResults.push({
+                        queueIndex: i,
+                        name: item.name,
+                        response: data
+                    });
+
+                    if (progressDetail) progressDetail.innerText = `Procesado: ${item.name}`;
+                } catch (err) {
+                    console.error("Error procesando item:", item, err);
+                    processingResults.push({
+                        queueIndex: i,
+                        name: item.name,
+                        response: { error: String(err) }
+                    });
+                    if (progressDetail) progressDetail.innerText = `Error procesando ${item.name}`;
+                }
+            }
+
+            Swal.close();
+
+            if (processingResults.length > 0) showResultsInDiv(processingResults);
+            else Swal.fire("Terminado", "No se han obtenido resultados.", "info");
+        });
+
+        /* --- Mostrar resultados en divs y navegación --- */
+        function showResultsInDiv(results) {
+            const container = document.getElementById('resultsContainer');
+            const info = document.getElementById('resultInfo');
+            const prevBtn = document.getElementById('prevResultBtn');
+            const nextBtn = document.getElementById('nextResultBtn');
+
+            processingResults = results;
+            currentIndex = 0;
+            container.classList.remove('hidden');
+
+            function render(i) {
+                const r = processingResults[i];
+                let invoice = r.response;
+                if (Array.isArray(invoice)) invoice = invoice[0];
+
+                info.innerText = `${i + 1} / ${processingResults.length} — ${r.name}`;
+
+                document.getElementById('invoiceNumber').value = invoice?.invoice_id || '';
+                document.getElementById('invoiceDate').value = invoice?.invoice_date || '';
+                document.getElementById('supplierNIF').value = invoice?.supplier_tax_id || '';
+                document.getElementById('total').value = invoice?.total_amount || '';
+
+                const tbody = document.querySelector('#lineItemsTable tbody');
+                tbody.innerHTML = '';
+                if (invoice?.line_items?.length) {
+                    invoice.line_items.forEach(item => {
+                        const tr = document.createElement('tr');
+                        [item.description || '', item.quantity || '', item.unit_price || '', item.amount || ''].forEach(v => {
+                            const td = document.createElement('td');
+                            const input = document.createElement('input');
+                            input.value = v;
+                            td.appendChild(input);
+                            tr.appendChild(td);
+                        });
+                        tbody.appendChild(tr);
+                    });
+                } else {
+                    const tr = document.createElement('tr');
+                    const td = document.createElement('td');
+                    td.colSpan = 4;
+                    td.innerText = 'Sin line items';
+                    tr.appendChild(td);
+                    tbody.appendChild(tr);
+                }
+
+                confirmForm.classList.remove('hidden');
+            }
+
+            prevBtn.onclick = () => {
+                if (currentIndex > 0) {
+                    currentIndex--;
+                    render(currentIndex);
+                }
+            };
+            nextBtn.onclick = () => {
+                if (currentIndex < processingResults.length - 1) {
+                    currentIndex++;
+                    render(currentIndex);
+                }
+            };
+
+            render(0);
+        }
+
+        /* --- DESCARGAR EXCEL --- */
         document.getElementById('downloadExcelBtn').addEventListener('click', () => {
             const wb = XLSX.utils.book_new();
             const ws_data = [];
