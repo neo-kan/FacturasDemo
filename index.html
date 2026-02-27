@@ -253,12 +253,11 @@
 
         /* --- SUBIDA --- */
         fileInput.addEventListener('change', async (e) => {
-            const files = Array.from(e.target.files); // convertir FileList a array
+            const files = Array.from(e.target.files);
             fileGen = null;
             listaDocumentos = [];
             processingQueue = [];
             processingResults = [];
-            resetResultsUI();
 
             if (!files.length) {
                 fileName.textContent = 'Ningún archivo seleccionado';
@@ -270,10 +269,21 @@
             const pdfFiles = files.filter(f => f.type === "application/pdf");
             const imageFiles = files.filter(f => f.type.startsWith("image/"));
 
+            // ❌ Evitar mezcla de PDF e imágenes
+            if (pdfFiles.length && imageFiles.length) {
+                Swal.fire("Aviso", "No puedes subir un PDF y una imagen al mismo tiempo.", "warning");
+                fileInput.value = ""; // resetear selección
+                fileName.textContent = 'Ningún archivo seleccionado';
+                processBtn.disabled = true;
+                return;
+            }
+
             // Solo permitimos 1 PDF
             if (pdfFiles.length > 1) {
                 Swal.fire("Aviso", "Solo puedes subir un PDF a la vez.", "warning");
-                fileInput.value = "";
+                fileInput.value = ""; // resetear selección
+                fileName.textContent = 'Ningún archivo seleccionado';
+                processBtn.disabled = true;
                 return;
             }
 
@@ -286,6 +296,7 @@
 
                 // Abrir selector de páginas
                 await selecionaPaginasPdf(fileGen);
+                return;
             }
 
             // Preparar imágenes
@@ -294,6 +305,7 @@
                 fileGen = imageFiles; // array de imágenes
                 fileName.textContent = imageFiles.map(f => f.name).join(", ");
                 processBtn.disabled = false;
+                return;
             }
         });
 
