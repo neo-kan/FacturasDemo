@@ -234,14 +234,15 @@
         const N8N_WEBHOOK_URL = "https://n8n-facturas-demo.onrender.com/webhook/google-doc-ai";
         const N8N_LOCAL = "http://localhost:5678/webhook-test/google-doc-ai";
 
-        let fileGen = null;            // File único (PDF) o array de Files (imágenes)
+        let fileGen = null;
         let type = "";
-        let listaDocumentos = [];      // índices base0 de páginas seleccionadas (para PDF)
-        let processingQueue = [];      // { blob, name, sourceType, meta }
-        let processingResults = [];    // respuestas del workflow
+        let listaDocumentos = [];
+        let processingQueue = [];
+        let processingResults = [];
         let currentIndex = 0;
+        let pdfRunTogether = true; // default: ejecutar páginas juntas
 
-        // Reset visual results container
+        /* Reset visual results */
         function resetResultsUI() {
             document.getElementById('resultsContainer').classList.add('hidden');
             confirmForm.classList.add('hidden');
@@ -272,16 +273,16 @@
             // ❌ Evitar mezcla de PDF e imágenes
             if (pdfFiles.length && imageFiles.length) {
                 Swal.fire("Aviso", "No puedes subir un PDF y una imagen al mismo tiempo.", "warning");
-                fileInput.value = ""; // resetear selección
+                fileInput.value = "";
                 fileName.textContent = 'Ningún archivo seleccionado';
                 processBtn.disabled = true;
                 return;
             }
 
-            // Solo permitimos 1 PDF
+            // Solo 1 PDF
             if (pdfFiles.length > 1) {
                 Swal.fire("Aviso", "Solo puedes subir un PDF a la vez.", "warning");
-                fileInput.value = ""; // resetear selección
+                fileInput.value = "";
                 fileName.textContent = 'Ningún archivo seleccionado';
                 processBtn.disabled = true;
                 return;
@@ -294,7 +295,7 @@
                 fileName.textContent = fileGen.name;
                 processBtn.disabled = false;
 
-                // Abrir selector de páginas
+                // Abrir selector de páginas con opción "juntas o separadas"
                 await selecionaPaginasPdf(fileGen);
                 return;
             }
@@ -302,7 +303,7 @@
             // Preparar imágenes
             if (imageFiles.length > 0) {
                 type = "image";
-                fileGen = imageFiles; // array de imágenes
+                fileGen = imageFiles;
                 fileName.textContent = imageFiles.map(f => f.name).join(", ");
                 processBtn.disabled = false;
                 return;
@@ -323,6 +324,7 @@
                 const arrayBuffer = await filePdf.arrayBuffer();
                 const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
+                // Contenedor de miniaturas
                 const container = document.createElement("div");
                 container.style.display = "flex";
                 container.style.flexWrap = "wrap";
@@ -372,27 +374,51 @@
                     container.appendChild(wrapper);
                 }
 
-                const { value: selectedPages } = await Swal.fire({
+                // Contenedor de radio buttons (juntas/separadas)
+                const modeContainer = document.createElement("div");
+                modeContainer.style.marginTop = "12px";
+                modeContainer.innerHTML = `
+            <label>
+                <input type="radio" name="executionMode" value="together" checked>
+                Ejecutar páginas juntas
+            </label>
+            &nbsp;&nbsp;
+            <label>
+                <input type="radio" name="executionMode" value="separate">
+                Ejecutar páginas por separado
+            </label>
+        `;
+
+                // Abrimos el modal
+                const { value: result } = await Swal.fire({
                     title: "Selecciona las páginas",
-                    html: container,
+                    html: " ", // placeholder
                     width: "80%",
                     showCancelButton: true,
                     allowOutsideClick: false,
                     allowEscapeKey: false,
                     confirmButtonText: "Aceptar",
+                    didOpen: () => {
+                        const htmlContainer = Swal.getHtmlContainer();
+                        htmlContainer.appendChild(container);
+                        htmlContainer.appendChild(modeContainer);
+                    },
                     preConfirm: () => {
                         const checked = container.querySelectorAll("input:checked");
                         if (checked.length === 0) {
                             Swal.showValidationMessage("Selecciona al menos una página");
                             return false;
                         }
-                        return Array.from(checked).map(cb => parseInt(cb.value));
+                        const selectedPages = Array.from(checked).map(cb => parseInt(cb.value));
+                        const mode = modeContainer.querySelector('input[name="executionMode"]:checked').value;
+                        return { selectedPages, mode };
                     }
                 });
 
-                if (selectedPages && selectedPages.length) {
-                    listaDocumentos = selectedPages.map(p => p - 1); // base0
-                    console.log("Páginas seleccionadas (base0):", listaDocumentos);
+                if (result) {
+                    listaDocumentos = result.selectedPages.map(p => p - 1); // base0
+                    listaDocumentosMode = result.mode; // 'together' o 'separate'
+                    console.log("Páginas seleccionadas:", listaDocumentos, "Modo:", listaDocumentosMode);
                 }
             } catch (err) {
                 console.error("Error al generar miniaturas:", err);
@@ -406,14 +432,12 @@
         /* --- PROCESAR FACTURA --- */
         processBtn.addEventListener('click', async () => {
             fileInput.value = '';
-
             if (!fileGen) return;
             processingQueue = [];
             processingResults = [];
 
-            // Construir la cola
             if (Array.isArray(fileGen)) {
-                // varias imágenes
+                // Varias imágenes
                 fileGen.forEach(imgFile => {
                     processingQueue.push({
                         blob: imgFile,
@@ -431,25 +455,43 @@
                 try {
                     const arrayBuffer = await fileGen.arrayBuffer();
                     const pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer);
-                    for (const pageIndex of listaDocumentos) {
+
+                    if (pdfRunTogether) {
+                        // Ejecutar juntas: generar PDF solo con las páginas seleccionadas
                         const newPdf = await PDFLib.PDFDocument.create();
-                        const [copied] = await newPdf.copyPages(pdfDoc, [pageIndex]);
-                        newPdf.addPage(copied);
+                        const copiedPages = await newPdf.copyPages(pdfDoc, listaDocumentos);
+                        copiedPages.forEach(p => newPdf.addPage(p));
                         const bytes = await newPdf.save();
                         const blob = new Blob([bytes], { type: "application/pdf" });
-                        const name = `${fileGen.name.replace(/\.pdf$/i, '')}_p${pageIndex + 1}.pdf`;
                         processingQueue.push({
                             blob,
-                            name,
-                            sourceType: "pdf-page",
-                            meta: { originalName: fileGen.name, pageIndex }
+                            name: fileGen.name.replace(/\.pdf$/i, '') + "_seleccion.pdf",
+                            sourceType: "pdf",
+                            meta: { originalName: fileGen.name }
                         });
+                    } else {
+                        // Ejecutar separadas: un PDF por página
+                        for (const pageIndex of listaDocumentos) {
+                            const newPdf = await PDFLib.PDFDocument.create();
+                            const [copied] = await newPdf.copyPages(pdfDoc, [pageIndex]);
+                            newPdf.addPage(copied);
+                            const bytes = await newPdf.save();
+                            const blob = new Blob([bytes], { type: "application/pdf" });
+                            processingQueue.push({
+                                blob,
+                                name: fileGen.name.replace(/\.pdf$/i, '') + `_p${pageIndex + 1}.pdf`,
+                                sourceType: "pdf-page",
+                                meta: { originalName: fileGen.name, pageIndex }
+                            });
+                        }
                     }
+
                 } catch (err) {
-                    console.error("Error creando PDFs por página:", err);
-                    Swal.fire("Error", "No se pudo preparar el PDF para procesar.", "error");
+                    console.error("Error creando PDFs:", err);
+                    Swal.fire("Error", "No se pudo preparar el PDF.", "error");
                     return;
                 }
+
             } else {
                 Swal.fire("Tipo no soportado", "Solo PDFs e imágenes son soportados.", "warning");
                 return;
@@ -460,14 +502,14 @@
                 return;
             }
 
-            // Modal de progreso
+            // Modal progreso
             const progressHtml = document.createElement('div');
             progressHtml.style.textAlign = "center";
             progressHtml.innerHTML = `
         <div class="spinner" style="margin: 10px auto;"></div>
         <div style="margin-top:12px;">
-          <div id="progressText">Procesando 0 / ${processingQueue.length}</div>
-          <div id="progressDetail" style="font-size:12px;color:#666;margin-top:6px;"></div>
+        <div id="progressText">Procesando 0 / ${processingQueue.length}</div>
+        <div id="progressDetail" style="font-size:12px;color:#666;margin-top:6px;"></div>
         </div>
     `;
             Swal.fire({
@@ -478,7 +520,6 @@
                 showConfirmButton: false
             });
 
-            // Enviar uno a uno
             for (let i = 0; i < processingQueue.length; i++) {
                 const item = processingQueue[i];
                 const progressText = document.getElementById('progressText');
@@ -522,7 +563,7 @@
             else Swal.fire("Terminado", "No se han obtenido resultados.", "info");
         });
 
-        /* --- Mostrar resultados en divs y navegación --- */
+        /* --- Mostrar resultados en divs --- */
         function showResultsInDiv(results) {
             const container = document.getElementById('resultsContainer');
             const info = document.getElementById('resultInfo');
@@ -571,18 +612,8 @@
                 confirmForm.classList.remove('hidden');
             }
 
-            prevBtn.onclick = () => {
-                if (currentIndex > 0) {
-                    currentIndex--;
-                    render(currentIndex);
-                }
-            };
-            nextBtn.onclick = () => {
-                if (currentIndex < processingResults.length - 1) {
-                    currentIndex++;
-                    render(currentIndex);
-                }
-            };
+            prevBtn.onclick = () => { if (currentIndex > 0) { currentIndex--; render(currentIndex); } };
+            nextBtn.onclick = () => { if (currentIndex < processingResults.length - 1) { currentIndex++; render(currentIndex); } };
 
             render(0);
         }
