@@ -244,6 +244,7 @@
             <div id="documentSide">
                 <div id="documentWrapper">
                     <img id="ocrPreview" alt="Documento procesado">
+                    <!-- <canvas  id="ocrPreview"></canvas> -->
                     <div id="overlayContainer"></div>
                 </div>
             </div>
@@ -752,7 +753,7 @@
                     let data;
                     try { data = JSON.parse(text); } catch { data = { raw: text }; }
 
-                    console.log(text)
+                    //console.log(text)
 
                     processingResults.push({ queueIndex: i, name: item.name, response: data, blob: item.blob });
                     if (progressDetail) progressDetail.innerText = `Procesado: ${item.name}`;
@@ -779,6 +780,30 @@
             currentIndex = 0;
             resultsContainer.classList.remove('hidden');
             renderIndex(0);
+        }
+
+        function setInputValueForKey(key, value) {
+            if (!key) return;
+
+            // 1️⃣ Si está en el fieldMap
+            const mappedId = fieldMap[key];
+            if (mappedId) {
+                const input = document.getElementById(mappedId);
+                if (input) {
+                    input.value = value;
+                    return;
+                }
+            }
+
+            // 2️⃣ Intentar por name o id directo
+            let input = document.getElementById(key);
+            if (!input) {
+                input = document.querySelector(`#confirmForm input[name="${key}"]`);
+            }
+
+            if (input) {
+                input.value = value;
+            }
         }
 
         async function renderIndex(i) {
