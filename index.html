@@ -20,8 +20,8 @@
         }
 
         .container {
-            max-width: 600px;
-            margin: 40px auto;
+            max-width: 1100px;
+            margin: 30px auto;
             padding: 20px;
         }
 
@@ -71,7 +71,7 @@
 
         #confirmForm {
             display: grid;
-            gap: 16px;
+            gap: 12px;
         }
 
         #confirmForm .form-group {
@@ -117,7 +117,11 @@
             border-radius: 4px;
         }
 
-        @media (max-width:640px) {
+        @media (max-width: 1024px) {
+            .container {
+                padding: 10px;
+            }
+
             #lineItemsTable {
                 display: block;
                 overflow-x: auto;
@@ -146,15 +150,75 @@
             }
         }
 
-        footer {
-            text-align: center;
+        /* results layout */
+        #resultsContainer {
+            display: flex;
+            gap: 24px;
+            align-items: flex-start;
+            margin-top: 20px;
+        }
+
+        #documentSide {
+            flex: 1;
+            min-width: 420px;
+            position: relative;
+        }
+
+        #documentWrapper {
+            position: relative;
+            display: inline-block;
+        }
+
+        #documentSide img {
+            max-width: 100%;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            display: block;
+        }
+
+        #overlayContainer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: auto;
+        }
+
+        #formSide {
+            width: 420px;
+        }
+
+        .ocr-box {
+            position: absolute;
+            border: 2px solid rgba(0, 123, 255, 0.9);
+            background: rgba(0, 123, 255, 0.12);
+            color: #003366;
             font-size: 12px;
-            color: #9ca3af;
-            margin-top: 16px;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            padding: 2px;
+            cursor: pointer;
+        }
+
+        .ocr-chip {
+            padding: 6px 8px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: #fff;
+            cursor: grab;
+            margin: 4px;
+            display: inline-block;
         }
 
         .hidden {
             display: none;
+        }
+
+        .footer-note {
+            text-align: center;
+            font-size: 12px;
+            color: #9ca3af;
+            margin-top: 12px;
         }
     </style>
 </head>
@@ -164,8 +228,8 @@
         <h1>Confirmación de Factura</h1>
 
         <div class="upload-card">
-            <input type="file" id="fileInput" accept=".pdf,image/*" multiple hidden />
-            <p>Maximo 15 páginas, 20 MB como máximo</p>
+            <input type="file" id="fileInput" accept=".pdf,image/*" multiple hidden>
+            <p>Máximo 15 páginas, 20 MB como máximo</p>
             <label for="fileInput" class="upload-button">📄 Subir factura</label>
             <p id="fileName" class="file-name">Ningún archivo seleccionado</p>
             <button id="processBtn" disabled>Procesar factura</button>
@@ -176,89 +240,274 @@
             <p>Procesando factura, por favor espere...</p>
         </div>
 
-        <!-- Contenedor para mostrar resultados en la página -->
         <div id="resultsContainer" class="hidden">
-            <div id="resultsNav" style="display:flex; gap:10px; margin-bottom:12px; align-items:center;">
-                <button id="prevResultBtn" class="upload-button" style="background:#94a3b8;">← Anterior</button>
-                <button id="nextResultBtn" class="upload-button">Siguiente →</button>
-                <div id="resultInfo" style="margin-left:12px; font-size:13px; color:#374151;"></div>
+            <div id="documentSide">
+                <div id="documentWrapper">
+                    <img id="ocrPreview" alt="Documento procesado">
+                    <div id="overlayContainer"></div>
+                </div>
             </div>
-            <!-- <div id="resultContent" style="width:100%; min-height:200px;"></div> -->
+
+            <div id="formSide">
+                <div id="resultInfo" style="margin-bottom:10px; font-weight:bold;"></div>
+
+                <form id="confirmForm" class="hidden">
+                    <input id="invoiceNumber" placeholder="Invoice Number"><br>
+                    <input id="invoiceDate" placeholder="Invoice Date"><br>
+                    <input id="supplierNIF" placeholder="Supplier NIF"><br>
+                    <input id="total" placeholder="Total"><br>
+
+                    <table id="lineItemsTable">
+                        <thead>
+                            <tr>
+                                <th>Descripción</th>
+                                <th>Cantidad</th>
+                                <th>Precio</th>
+                                <th>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+
+                    <br>
+                    <button type="button" id="downloadExcelBtn">Descargar Excel</button>
+                </form>
+
+                <div style="margin-top:14px; display:flex; gap:8px;">
+                    <button id="prevResultBtn">Anterior</button>
+                    <button id="nextResultBtn">Siguiente</button>
+                </div>
+            </div>
         </div>
 
-        <form id="confirmForm" class="hidden">
-            <div class="form-group">
-                <label>Factura Nº <input type="text" id="invoiceNumber" /></label>
-                <label>Fecha <input type="text" id="invoiceDate" /></label>
-                <label>NIF <input type="text" id="supplierNIF" /></label>
-                <label>Total <input type="text" id="total" /></label>
-            </div>
-
-            <table id="lineItemsTable">
-                <tbody></tbody>
-            </table>
-
-            <button type="button" id="downloadExcelBtn">📥 Descargar Excel</button>
-        </form>
-
-        <footer>Demo técnica · No se almacenan documentos</footer>
+        <div class="footer-note">Arrastra o haz click sobre un overlay/chip para rellenar un campo.</div>
     </div>
 
-    <!-- SweetAlert (solo se sigue usando para el modal de progreso mientras procesa) -->
+    <!-- Librerías externas -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-
-    <!-- pdf-lib (para dividir PDF) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
-
-    <!-- pdf.js (para miniaturas) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script>
-        // configuramos worker UNA sola vez
-        pdfjsLib.GlobalWorkerOptions.workerSrc =
-            "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-    </script>
-
-    <!-- XLSX -->
+    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";</script>
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 
     <script>
-        console.log("pdf.js version:", pdfjsLib.version);
+        /* ----------------------------
+           CONFIG
+           ---------------------------- */
+        const N8N_WEBHOOK_URL = "https://n8n-facturas-demo.onrender.com/webhook/google-doc-ai"; // remoto
+        const N8N_LOCAL = "http://localhost:5678/webhook-test/google-doc-ai"; // local dev
 
-        /* Variables globales */
+        /* ----------------------------
+           DOM refs + estado
+           ---------------------------- */
         const fileInput = document.getElementById('fileInput');
         const fileName = document.getElementById('fileName');
         const processBtn = document.getElementById('processBtn');
-        const confirmForm = document.getElementById('confirmForm');
         const loader = document.getElementById('loader');
-
-        const N8N_WEBHOOK_URL = "https://n8n-facturas-demo.onrender.com/webhook/google-doc-ai";
-        const N8N_LOCAL = "http://localhost:5678/webhook-test/google-doc-ai";
+        const confirmForm = document.getElementById('confirmForm');
+        const ocrPreview = document.getElementById('ocrPreview');
+        const overlayContainer = document.getElementById('overlayContainer');
+        const resultInfo = document.getElementById('resultInfo');
+        const lineItemsTbody = document.querySelector('#lineItemsTable tbody');
+        const resultsContainer = document.getElementById('resultsContainer');
+        const prevBtn = document.getElementById('prevResultBtn');
+        const nextBtn = document.getElementById('nextResultBtn');
 
         let fileGen = null;
-        let type = "";
         let listaDocumentos = [];
+        let pdfRunTogether = true;
         let processingQueue = [];
         let processingResults = [];
         let currentIndex = 0;
-        let pdfRunTogether = true; // default: ejecutar páginas juntas
 
-        /* Reset visual results */
-        function resetResultsUI() {
-            document.getElementById('resultsContainer').classList.add('hidden');
-            confirmForm.classList.add('hidden');
-            document.getElementById('resultInfo').innerText = '';
-            document.querySelector('#lineItemsTable tbody').innerHTML = '';
-            currentIndex = 0;
-            processingResults = [];
+        /* mapping simple para inputs */
+        const fieldMap = { invoice_id: 'invoiceNumber', invoice_date: 'invoiceDate', supplier_tax_id: 'supplierNIF', total_amount: 'total', total: 'total' };
+
+        /* ----------------------------
+           HELPERS: bounding normalization (soporta varios formatos)
+           ---------------------------- */
+        function normalizeBboxToPixels(bbox, naturalW, naturalH) {
+            if (!bbox) return null;
+
+            // normalizedVertices
+            if (Array.isArray(bbox.normalizedVertices) && bbox.normalizedVertices.length) {
+                const verts = bbox.normalizedVertices;
+                const xs = verts.map(v => (v.x ?? 0) * naturalW);
+                const ys = verts.map(v => (v.y ?? 0) * naturalH);
+                const left = Math.min(...xs), top = Math.min(...ys);
+                return { x: left, y: top, width: Math.max(...xs) - left, height: Math.max(...ys) - top };
+            }
+
+            // vertices absolute array
+            if (Array.isArray(bbox.vertices) && bbox.vertices.length) {
+                const verts = bbox.vertices;
+                const xs = verts.map(v => v.x ?? 0);
+                const ys = verts.map(v => v.y ?? 0);
+                const left = Math.min(...xs), top = Math.min(...ys);
+                return { x: left, y: top, width: Math.max(...xs) - left, height: Math.max(...ys) - top };
+            }
+
+            // left/top/right/bottom or left/top/width/height
+            if ('left' in bbox && 'top' in bbox) {
+                const left = bbox.left;
+                const top = bbox.top;
+                const width = ('width' in bbox) ? bbox.width : (('right' in bbox) ? bbox.right - bbox.left : 0);
+                const height = ('height' in bbox) ? bbox.height : (('bottom' in bbox) ? bbox.bottom - bbox.top : 0);
+                if (left <= 1 && top <= 1 && width <= 1 && height <= 1) return { x: left * naturalW, y: top * naturalH, width: width * naturalW, height: height * naturalH };
+                return { x: left, y: top, width, height };
+            }
+
+            // x,y,width,height (maybe normalized)
+            if ('x' in bbox && 'y' in bbox && ('width' in bbox || 'w' in bbox)) {
+                const w = bbox.width ?? bbox.w;
+                const h = bbox.height ?? bbox.h ?? 0;
+                if (bbox.x <= 1 && bbox.y <= 1 && w <= 1 && h <= 1) {
+                    return { x: bbox.x * naturalW, y: bbox.y * naturalH, width: w * naturalW, height: h * naturalH };
+                }
+                return { x: bbox.x, y: bbox.y, width: w, height: h };
+            }
+
+            // x1,y1,x2,y2
+            if ('x1' in bbox && 'y1' in bbox && 'x2' in bbox && 'y2' in bbox) {
+                const left = bbox.x1, top = bbox.y1, width = bbox.x2 - bbox.x1, height = bbox.y2 - bbox.y1;
+                if (left <= 1 && top <= 1 && width <= 1 && height <= 1) {
+                    return { x: left * naturalW, y: top * naturalH, width: width * naturalW, height: height * naturalH };
+                }
+                return { x: left, y: top, width, height };
+            }
+
+            return null;
         }
 
-        /* --- SUBIDA --- */
+        /* Extrae un listado uniforme de campos detectados por el agente */
+        function extractOcrFieldsFromAgent(invoice, naturalW, naturalH) {
+            const out = [];
+            if (!invoice || typeof invoice !== 'object') return out;
+
+            /* ----------------------------------
+               1️⃣ BLOQUES REALES DE DOCUMENT AI
+               pages[].blocks[].layout.boundingPoly
+            ---------------------------------- */
+            if (Array.isArray(invoice.pages)) {
+                invoice.pages.forEach(page => {
+                    if (!Array.isArray(page.blocks)) return;
+
+                    page.blocks.forEach(block => {
+                        const text = block.text || block.layout?.text || '';
+                        const poly = block.layout?.boundingPoly;
+
+                        if (!text || !poly) return;
+
+                        const bbox = normalizeBboxToPixels(poly, naturalW, naturalH);
+
+                        out.push({
+                            key: block.type || 'block',
+                            value: String(text),
+                            bbox
+                        });
+                    });
+                });
+            }
+
+            /* ----------------------------------
+               2️⃣ OCR_FIELDS (si existen)
+            ---------------------------------- */
+            if (Array.isArray(invoice.ocr_fields)) {
+                invoice.ocr_fields.forEach(f => {
+                    const bbox = f.bbox
+                        ? normalizeBboxToPixels(f.bbox, naturalW, naturalH)
+                        : null;
+
+                    out.push({
+                        key: f.key ?? f.name ?? 'field',
+                        value: String(f.value ?? f.text ?? ''),
+                        bbox
+                    });
+                });
+            }
+
+            /* ----------------------------------
+               3️⃣ FIELDS MAP
+            ---------------------------------- */
+            if (invoice.fields && typeof invoice.fields === 'object') {
+                for (const [k, v] of Object.entries(invoice.fields)) {
+                    if (!v) continue;
+
+                    if (typeof v === 'string' || typeof v === 'number') {
+                        out.push({ key: k, value: String(v), bbox: null });
+                    } else {
+                        const text = v.text || v.value || '';
+                        const bbox = v.bbox
+                            ? normalizeBboxToPixels(v.bbox, naturalW, naturalH)
+                            : null;
+
+                        out.push({
+                            key: k,
+                            value: String(text),
+                            bbox
+                        });
+                    }
+                }
+            }
+
+            /* ----------------------------------
+               4️⃣ CAMPOS PLANOS DEL AGENTE
+            ---------------------------------- */
+            const knownKeys = [
+                'invoice_id',
+                'invoice_date',
+                'supplier_name',
+                'supplier_tax_id',
+                'supplier_address',
+                'supplier_phone',
+                'supplier_email',
+                'receiver_tax_id',
+                'net_amount',
+                'total_tax_amount',
+                'total_amount',
+                'payment_terms',
+                'due_date',
+                'currency'
+            ];
+
+            knownKeys.forEach(k => {
+                if (invoice[k] !== undefined && invoice[k] !== null) {
+                    out.push({
+                        key: k,
+                        value: String(invoice[k]),
+                        bbox: null
+                    });
+                }
+            });
+
+            /* ----------------------------------
+               5️⃣ ELIMINAR DUPLICADOS
+            ---------------------------------- */
+            const uniq = [];
+            const seen = new Set();
+
+            out.forEach(f => {
+                const id = `${f.key}:::${f.value}`;
+                if (!seen.has(id)) {
+                    seen.add(id);
+                    uniq.push(f);
+                }
+            });
+
+            return uniq;
+        }
+
+        /* ----------------------------
+           UI: selección de archivo + miniaturas PDF (manteniendo comportamiento anterior)
+           ---------------------------- */
         fileInput.addEventListener('change', async (e) => {
             const files = Array.from(e.target.files);
             fileGen = null;
             listaDocumentos = [];
             processingQueue = [];
             processingResults = [];
+            processingResults.length = 0;
+            currentIndex = 0;
 
             if (!files.length) {
                 fileName.textContent = 'Ningún archivo seleccionado';
@@ -266,11 +515,10 @@
                 return;
             }
 
-            // Separar PDFs e imágenes
             const pdfFiles = files.filter(f => f.type === "application/pdf");
             const imageFiles = files.filter(f => f.type.startsWith("image/"));
 
-            // ❌ Evitar mezcla de PDF e imágenes
+            // evitar mezcla
             if (pdfFiles.length && imageFiles.length) {
                 Swal.fire("Aviso", "No puedes subir un PDF y una imagen al mismo tiempo.", "warning");
                 fileInput.value = "";
@@ -279,7 +527,6 @@
                 return;
             }
 
-            // Solo 1 PDF
             if (pdfFiles.length > 1) {
                 Swal.fire("Aviso", "Solo puedes subir un PDF a la vez.", "warning");
                 fileInput.value = "";
@@ -288,29 +535,24 @@
                 return;
             }
 
-            // Preparar PDF
             if (pdfFiles.length === 1) {
                 fileGen = pdfFiles[0];
-                type = "application/pdf";
                 fileName.textContent = fileGen.name;
                 processBtn.disabled = false;
-
-                // Abrir selector de páginas con opción "juntas o separadas"
                 await selecionaPaginasPdf(fileGen);
                 return;
             }
 
-            // Preparar imágenes
             if (imageFiles.length > 0) {
                 type = "image";
-                fileGen = imageFiles;
+                fileGen = imageFiles; // array de imágenes
                 fileName.textContent = imageFiles.map(f => f.name).join(", ");
                 processBtn.disabled = false;
                 return;
             }
         });
 
-        /* --- SELECCIONAR PAGINAS PDF --- */
+        /* función para seleccionar páginas del pdf (modal con miniaturas) */
         async function selecionaPaginasPdf(filePdf) {
             Swal.fire({
                 title: "Abriendo PDF",
@@ -324,7 +566,6 @@
                 const arrayBuffer = await filePdf.arrayBuffer();
                 const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
-                // Contenedor de miniaturas
                 const container = document.createElement("div");
                 container.style.display = "flex";
                 container.style.flexWrap = "wrap";
@@ -374,54 +615,47 @@
                     container.appendChild(wrapper);
                 }
 
-                // Contenedor de radio buttons (juntas/separadas)
                 const modeContainer = document.createElement("div");
                 modeContainer.style.marginTop = "12px";
                 modeContainer.innerHTML = `
-            <label>
-                <input type="radio" name="executionMode" value="together" checked>
-                Ejecutar páginas juntas
+            <label style="margin-right:10px;">
+                <input type="radio" name="pdfMode" value="together" checked> Ejecutar páginas juntas
             </label>
-            &nbsp;&nbsp;
             <label>
-                <input type="radio" name="executionMode" value="separate">
-                Ejecutar páginas por separado
+                <input type="radio" name="pdfMode" value="separate"> Ejecutar páginas por separado
             </label>
         `;
 
-                // Abrimos el modal
                 const { value: result } = await Swal.fire({
-                    title: "Selecciona las páginas",
-                    html: " ", // placeholder
-                    width: "80%",
+                    title: "Selecciona páginas y modo de ejecución",
+                    html: "<div id='swalPlaceholder'></div>",
+                    width: "85%",
                     showCancelButton: true,
                     allowOutsideClick: false,
                     allowEscapeKey: false,
                     confirmButtonText: "Aceptar",
                     didOpen: () => {
                         const htmlContainer = Swal.getHtmlContainer();
-                        htmlContainer.appendChild(container);
-                        htmlContainer.appendChild(modeContainer);
+                        const placeholder = htmlContainer.querySelector('#swalPlaceholder');
+                        placeholder.appendChild(container);
+                        placeholder.appendChild(modeContainer);
                     },
                     preConfirm: () => {
                         const checked = container.querySelectorAll("input:checked");
-                        if (checked.length === 0) {
-                            Swal.showValidationMessage("Selecciona al menos una página");
-                            return false;
-                        }
-                        const selectedPages = Array.from(checked).map(cb => parseInt(cb.value));
-                        const mode = modeContainer.querySelector('input[name="executionMode"]:checked').value;
-                        return { selectedPages, mode };
+                        if (checked.length === 0) { Swal.showValidationMessage("Selecciona al menos una página"); return false; }
+                        const pages = Array.from(checked).map(cb => parseInt(cb.value));
+                        const mode = modeContainer.querySelector('input[name="pdfMode"]:checked').value;
+                        return { pages, mode };
                     }
                 });
 
                 if (result) {
-                    listaDocumentos = result.selectedPages.map(p => p - 1); // base0
-                    listaDocumentosMode = result.mode; // 'together' o 'separate'
-                    console.log("Páginas seleccionadas:", listaDocumentos, "Modo:", listaDocumentosMode);
+                    listaDocumentos = result.pages.map(p => p - 1);
+                    pdfRunTogether = result.mode === "together";
                 }
+
             } catch (err) {
-                console.error("Error al generar miniaturas:", err);
+                console.error("Error generando miniaturas:", err);
                 Swal.fire("Error", "No se pudo abrir el PDF.", "error");
                 listaDocumentos = [];
             } finally {
@@ -429,69 +663,49 @@
             }
         }
 
-        /* --- PROCESAR FACTURA --- */
+        /* ----------------------------
+           PROCESS: preparar cola y enviar a n8n
+           ---------------------------- */
         processBtn.addEventListener('click', async () => {
             fileInput.value = '';
             if (!fileGen) return;
             processingQueue = [];
             processingResults = [];
 
+            // Construir cola: varias imágenes o PDF(páginas o conjunto)
             if (Array.isArray(fileGen)) {
-                // Varias imágenes
-                fileGen.forEach(imgFile => {
-                    processingQueue.push({
-                        blob: imgFile,
-                        name: imgFile.name,
-                        sourceType: "image",
-                        meta: { originalName: imgFile.name }
-                    });
-                });
+                fileGen.forEach(imgFile => processingQueue.push({ blob: imgFile, name: imgFile.name, sourceType: "image", meta: { originalName: imgFile.name } }));
             } else if (fileGen.type === "application/pdf") {
                 if (!listaDocumentos.length) {
                     Swal.fire("Aviso", "No has seleccionado páginas para el PDF.", "warning");
                     return;
                 }
-
                 try {
                     const arrayBuffer = await fileGen.arrayBuffer();
                     const pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer);
 
                     if (pdfRunTogether) {
-                        // Ejecutar juntas: generar PDF solo con las páginas seleccionadas
                         const newPdf = await PDFLib.PDFDocument.create();
                         const copiedPages = await newPdf.copyPages(pdfDoc, listaDocumentos);
                         copiedPages.forEach(p => newPdf.addPage(p));
                         const bytes = await newPdf.save();
                         const blob = new Blob([bytes], { type: "application/pdf" });
-                        processingQueue.push({
-                            blob,
-                            name: fileGen.name.replace(/\.pdf$/i, '') + "_seleccion.pdf",
-                            sourceType: "pdf",
-                            meta: { originalName: fileGen.name }
-                        });
+                        processingQueue.push({ blob, name: fileGen.name.replace(/\.pdf$/i, '') + "_seleccion.pdf", sourceType: "pdf", meta: { originalName: fileGen.name } });
                     } else {
-                        // Ejecutar separadas: un PDF por página
                         for (const pageIndex of listaDocumentos) {
                             const newPdf = await PDFLib.PDFDocument.create();
                             const [copied] = await newPdf.copyPages(pdfDoc, [pageIndex]);
                             newPdf.addPage(copied);
                             const bytes = await newPdf.save();
                             const blob = new Blob([bytes], { type: "application/pdf" });
-                            processingQueue.push({
-                                blob,
-                                name: fileGen.name.replace(/\.pdf$/i, '') + `_p${pageIndex + 1}.pdf`,
-                                sourceType: "pdf-page",
-                                meta: { originalName: fileGen.name, pageIndex }
-                            });
+                            processingQueue.push({ blob, name: fileGen.name.replace(/\.pdf$/i, '') + `_p${pageIndex + 1}.pdf`, sourceType: "pdf-page", meta: { originalName: fileGen.name, pageIndex } });
                         }
                     }
-
                 } catch (err) {
                     console.error("Error creando PDFs:", err);
                     Swal.fire("Error", "No se pudo preparar el PDF.", "error");
                     return;
                 }
-
             } else {
                 Swal.fire("Tipo no soportado", "Solo PDFs e imágenes son soportados.", "warning");
                 return;
@@ -508,23 +722,17 @@
             progressHtml.innerHTML = `
         <div class="spinner" style="margin: 10px auto;"></div>
         <div style="margin-top:12px;">
-        <div id="progressText">Procesando 0 / ${processingQueue.length}</div>
-        <div id="progressDetail" style="font-size:12px;color:#666;margin-top:6px;"></div>
+            <div id="progressText">Procesando 0 / ${processingQueue.length}</div>
+            <div id="progressDetail" style="font-size:12px;color:#666;margin-top:6px;"></div>
         </div>
     `;
-            Swal.fire({
-                title: "Procesando documentos",
-                html: progressHtml,
-                allowOutsideClick: false,
-                allowEscapeKey: false,
-                showConfirmButton: false
-            });
+            Swal.fire({ title: "Procesando documentos", html: progressHtml, allowOutsideClick: false, allowEscapeKey: false, showConfirmButton: false });
 
+            // enviar cada item a n8n (local por defecto)
             for (let i = 0; i < processingQueue.length; i++) {
                 const item = processingQueue[i];
                 const progressText = document.getElementById('progressText');
                 const progressDetail = document.getElementById('progressDetail');
-
                 if (progressText) progressText.innerText = `Procesando ${i + 1} / ${processingQueue.length}`;
                 if (progressDetail) progressDetail.innerText = `Enviando ${item.name}...`;
 
@@ -534,103 +742,241 @@
                 formData.append('pageIndex', (item.meta.pageIndex ?? ''));
 
                 try {
-                    const res = await fetch(N8N_WEBHOOK_URL, { method: "POST", body: formData });
+                    // intenta local, si falla usa remoto
+                    let res = await fetch(N8N_LOCAL, { method: "POST", body: formData });
+                    if (!res.ok) {
+                        // intenta remoto
+                        res = await fetch(N8N_WEBHOOK_URL, { method: "POST", body: formData });
+                    }
                     const text = await res.text();
                     let data;
                     try { data = JSON.parse(text); } catch { data = { raw: text }; }
 
-                    processingResults.push({
-                        queueIndex: i,
-                        name: item.name,
-                        response: data
-                    });
+                    console.log(text)
 
+                    processingResults.push({ queueIndex: i, name: item.name, response: data, blob: item.blob });
                     if (progressDetail) progressDetail.innerText = `Procesado: ${item.name}`;
                 } catch (err) {
                     console.error("Error procesando item:", item, err);
-                    processingResults.push({
-                        queueIndex: i,
-                        name: item.name,
-                        response: { error: String(err) }
-                    });
+                    processingResults.push({ queueIndex: i, name: item.name, response: { error: String(err) }, blob: item.blob });
                     if (progressDetail) progressDetail.innerText = `Error procesando ${item.name}`;
                 }
             }
 
             Swal.close();
-
-            if (processingResults.length > 0) showResultsInDiv(processingResults);
-            else Swal.fire("Terminado", "No se han obtenido resultados.", "info");
+            if (processingResults.length > 0) {
+                showResultsInDiv(processingResults);
+            } else {
+                Swal.fire("Terminado", "No se han obtenido resultados.", "info");
+            }
         });
 
-        /* --- Mostrar resultados en divs --- */
+        /* ----------------------------
+           Mostrar resultados + overlays + drag&drop (usando funciones robustas)
+           ---------------------------- */
         function showResultsInDiv(results) {
-            const container = document.getElementById('resultsContainer');
-            const info = document.getElementById('resultInfo');
-            const prevBtn = document.getElementById('prevResultBtn');
-            const nextBtn = document.getElementById('nextResultBtn');
-
             processingResults = results;
             currentIndex = 0;
-            container.classList.remove('hidden');
-
-            function render(i) {
-                const r = processingResults[i];
-                let invoice = r.response;
-                if (Array.isArray(invoice)) invoice = invoice[0];
-
-                info.innerText = `${i + 1} / ${processingResults.length} — ${r.name}`;
-
-                document.getElementById('invoiceNumber').value = invoice?.invoice_id || '';
-                document.getElementById('invoiceDate').value = invoice?.invoice_date || '';
-                document.getElementById('supplierNIF').value = invoice?.supplier_tax_id || '';
-                document.getElementById('total').value = invoice?.total_amount || '';
-
-                const tbody = document.querySelector('#lineItemsTable tbody');
-                tbody.innerHTML = '';
-                if (invoice?.line_items?.length) {
-                    invoice.line_items.forEach(item => {
-                        const tr = document.createElement('tr');
-                        [item.description || '', item.quantity || '', item.unit_price || '', item.amount || ''].forEach(v => {
-                            const td = document.createElement('td');
-                            const input = document.createElement('input');
-                            input.value = v;
-                            td.appendChild(input);
-                            tr.appendChild(td);
-                        });
-                        tbody.appendChild(tr);
-                    });
-                } else {
-                    const tr = document.createElement('tr');
-                    const td = document.createElement('td');
-                    td.colSpan = 4;
-                    td.innerText = 'Sin line items';
-                    tr.appendChild(td);
-                    tbody.appendChild(tr);
-                }
-
-                confirmForm.classList.remove('hidden');
-            }
-
-            prevBtn.onclick = () => { if (currentIndex > 0) { currentIndex--; render(currentIndex); } };
-            nextBtn.onclick = () => { if (currentIndex < processingResults.length - 1) { currentIndex++; render(currentIndex); } };
-
-            render(0);
+            resultsContainer.classList.remove('hidden');
+            renderIndex(0);
         }
 
-        /* --- DESCARGAR EXCEL --- */
+        async function renderIndex(i) {
+            const r = processingResults[i];
+            currentIndex = i;
+            resultInfo.innerText = `${i + 1} / ${processingResults.length} — ${r.name}`;
+
+            // cargar imagen desde blob
+            if (ocrPreview._objectURL) URL.revokeObjectURL(ocrPreview._objectURL);
+            ocrPreview._objectURL = URL.createObjectURL(r.blob);
+            ocrPreview.src = ocrPreview._objectURL;
+
+            await new Promise(resolve => {
+                if (ocrPreview.complete && ocrPreview.naturalWidth) resolve();
+                else {
+                    ocrPreview.onload = () => resolve();
+                    ocrPreview.onerror = () => resolve();
+                }
+            });
+
+            const naturalW = ocrPreview.naturalWidth || ocrPreview.width;
+            const naturalH = ocrPreview.naturalHeight || ocrPreview.height;
+            const displayedW = ocrPreview.clientWidth;
+            const displayedH = ocrPreview.clientHeight;
+            const scaleX = displayedW / naturalW;
+            const scaleY = displayedH / naturalH;
+
+            overlayContainer.innerHTML = "";
+            overlayContainer.style.width = displayedW + 'px';
+            overlayContainer.style.height = displayedH + 'px';
+
+            let invoice = r.response;
+            if (Array.isArray(invoice)) invoice = invoice[0];
+
+            const ocrFields = extractOcrFieldsFromAgent(invoice, naturalW, naturalH);
+
+            // si hay bbox, dibujarlos
+            if (ocrFields.some(f => f.bbox)) {
+                ocrFields.forEach(f => {
+                    if (!f.bbox) return;
+                    const bx = (f.bbox.x || 0) * scaleX;
+                    const by = (f.bbox.y || 0) * scaleY;
+                    const bw = (f.bbox.width || 10) * scaleX;
+                    const bh = (f.bbox.height || 10) * scaleY;
+
+                    const box = document.createElement('div');
+                    box.className = 'ocr-box';
+                    box.style.left = bx + 'px';
+                    box.style.top = by + 'px';
+                    box.style.width = bw + 'px';
+                    box.style.height = bh + 'px';
+                    box.title = `${f.key}: ${f.value}`;
+                    box.innerText = String(f.value).slice(0, 80);
+
+                    box.draggable = true;
+                    box.addEventListener('dragstart', (ev) => {
+                        ev.dataTransfer.setData('text/plain', f.value);
+                        ev.dataTransfer.setData('application/json', JSON.stringify({ key: f.key, value: f.value }));
+                    });
+                    box.addEventListener('click', () => setInputValueForKey(f.key, f.value));
+                    overlayContainer.appendChild(box);
+                });
+            } else {
+                // no bbox: mostrar chips con valores detectados
+                const list = document.createElement('div');
+                list.style.marginTop = '8px';
+                list.style.display = 'flex';
+                list.style.flexWrap = 'wrap';
+                list.style.gap = '6px';
+                list.style.padding = '8px';
+
+                const textual = [];
+                if (invoice && typeof invoice === 'object') {
+                    if (invoice.fields && typeof invoice.fields === 'object') {
+                        for (const [k, v] of Object.entries(invoice.fields)) {
+                            if (v == null) continue;
+                            if (typeof v === 'string' || typeof v === 'number') textual.push({ key: k, value: String(v) });
+                            else textual.push({ key: k, value: String(v.text || v.value || '') });
+                        }
+                    }
+                    if (Array.isArray(invoice.ocr_fields)) {
+                        invoice.ocr_fields.forEach(f => textual.push({ key: f.key || f.name || 'field', value: String(f.value || f.text || '') }));
+                    }
+                    const known = ['invoice_id', 'invoice_date', 'supplier_name', 'supplier_tax_id', 'total_amount', 'net_amount', 'total_tax_amount', 'currency'];
+                    known.forEach(k => { if (invoice[k] !== undefined && invoice[k] !== null) textual.push({ key: k, value: String(invoice[k]) }); });
+
+                    for (const [k, v] of Object.entries(invoice)) {
+                        if (textual.find(t => t.key === k)) continue;
+                        if (typeof v === 'string' || typeof v === 'number') textual.push({ key: k, value: String(v) });
+                        else if (v && typeof v === 'object' && ('value' in v || 'text' in v)) textual.push({ key: k, value: String(v.value || v.text || '') });
+                    }
+                }
+
+                if (textual.length === 0) {
+                    const n = document.createElement('div');
+                    n.innerText = 'No hay campos OCR con coordenadas. Se muestran campos detectados en lista.';
+                    n.style.marginTop = '8px';
+                    overlayContainer.appendChild(n);
+                } else {
+                    textual.forEach(f => {
+                        const chip = document.createElement('div');
+                        chip.className = 'ocr-chip';
+                        chip.textContent = `${f.key}: ${f.value}`.slice(0, 120);
+                        chip.draggable = true;
+                        chip.addEventListener('dragstart', (ev) => {
+                            ev.dataTransfer.setData('text/plain', f.value);
+                            ev.dataTransfer.setData('application/json', JSON.stringify({ key: f.key, value: f.value }));
+                        });
+                        chip.addEventListener('click', () => setInputValueForKey(f.key, f.value));
+                        list.appendChild(chip);
+                    });
+                    overlayContainer.appendChild(list);
+                }
+            }
+
+            // drop handlers en inputs (mantenemos idempotencia)
+            document.querySelectorAll('#confirmForm input').forEach(input => {
+                input.addEventListener('dragover', ev => ev.preventDefault());
+                input.addEventListener('drop', ev => {
+                    ev.preventDefault();
+                    const text = ev.dataTransfer.getData('text/plain');
+                    input.value = text;
+                });
+            });
+
+            // rellenar formulario con valores si existen
+            function getInvoiceValue(key) {
+                if (!invoice) return '';
+                if (invoice[key] !== undefined && invoice[key] !== null) return String(invoice[key]);
+                if (invoice.fields && invoice.fields[key] !== undefined) {
+                    const v = invoice.fields[key];
+                    return (typeof v === 'string' || typeof v === 'number') ? String(v) : (v.text || v.value || '');
+                }
+                if (Array.isArray(invoice.ocr_fields)) {
+                    const found = invoice.ocr_fields.find(x => (x.key || x.name) === key);
+                    if (found) return String(found.value || found.text || '');
+                }
+                return '';
+            }
+
+            ['invoice_id', 'invoice_date', 'supplier_tax_id', 'supplier_name', 'total_amount', 'total'].forEach(k => {
+                const val = getInvoiceValue(k);
+                if (!val) return;
+                const id = fieldMap[k];
+                if (id) {
+                    const el = document.getElementById(id);
+                    if (el) el.value = val;
+                } else {
+                    setInputValueForKey(k, val);
+                }
+            });
+
+            // render line_items
+            lineItemsTbody.innerHTML = '';
+            const items = (invoice && (invoice.line_items || invoice.items)) ? (invoice.line_items || invoice.items) : [];
+            if (Array.isArray(items) && items.length) {
+                items.forEach(item => {
+                    const tr = document.createElement('tr');
+                    const desc = item.description || item.desc || item.name || '';
+                    const qty = item.quantity || item.qty || '';
+                    const unit = item.unit_price || item.unitPrice || item.price || '';
+                    const total = item.amount || item.total || item.line_total || '';
+                    [desc, qty, unit, total].forEach(v => {
+                        const td = document.createElement('td');
+                        const input = document.createElement('input');
+                        input.value = v;
+                        td.appendChild(input);
+                        tr.appendChild(td);
+                    });
+                    lineItemsTbody.appendChild(tr);
+                });
+            } else {
+                const tr = document.createElement('tr');
+                const td = document.createElement('td');
+                td.colSpan = 4;
+                td.innerText = 'Sin line items';
+                tr.appendChild(td);
+                lineItemsTbody.appendChild(tr);
+            }
+
+            confirmForm.classList.remove('hidden');
+        }
+
+        /* prev/next handlers */
+        prevBtn.onclick = () => { if (currentIndex > 0) { currentIndex--; renderIndex(currentIndex); } };
+        nextBtn.onclick = () => { if (currentIndex < processingResults.length - 1) { currentIndex++; renderIndex(currentIndex); } };
+
+        /* descarga excel */
         document.getElementById('downloadExcelBtn').addEventListener('click', () => {
             const wb = XLSX.utils.book_new();
             const ws_data = [];
-            const header = ['Descripción', 'Cantidad', 'Precio Unitario', 'IVA (%)', 'IVA (€)', 'Total (€)'];
+            const header = ['Descripción', 'Cantidad', 'Precio Unitario', 'Total'];
             ws_data.push(header);
-
             document.querySelectorAll('#lineItemsTable tbody tr').forEach(tr => {
                 const row = [];
                 tr.querySelectorAll('input').forEach(inp => row.push(inp.value));
                 ws_data.push(row);
             });
-
             const ws = XLSX.utils.aoa_to_sheet(ws_data);
             XLSX.utils.book_append_sheet(wb, ws, 'LineItems');
             XLSX.writeFile(wb, 'factura.xlsx');

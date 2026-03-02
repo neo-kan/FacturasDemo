@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>DataExtract AI Dashboard</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap"
+        rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        rel="stylesheet" />
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#007fff",
+                        "background-light": "#f5f7f8",
+                        "background-dark": "#0f1923",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: { "DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px" },
+                },
+            },
+        }
+    </script>
+</head>
+
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 antialiased">
+    <div class="flex h-screen overflow-hidden">
+        <aside class="w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col">
+            <div class="p-6">
+                <div class="flex items-center gap-3">
+                    <div class="bg-primary rounded-lg p-2 text-white">
+                        <span class="material-symbols-outlined align-middle">analytics</span>
+                    </div>
+                    <div class="flex flex-col">
+                        <h1 class="text-slate-900 dark:text-white text-base font-bold leading-none">DataExtract AI</h1>
+                        <p class="text-slate-500 dark:text-slate-400 text-xs font-normal mt-1">Plan Enterprise</p>
+                    </div>
+                </div>
+            </div>
+            <nav class="flex-1 px-4 py-4 space-y-1">
+                <a class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/10 text-primary font-medium"
+                    href="#">
+                    <span class="material-symbols-outlined">home</span>
+                    <span class="text-sm">Inicio</span>
+                </a>
+                <a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                    href="#">
+                    <span class="material-symbols-outlined">description</span>
+                    <span class="text-sm">Documentos</span>
+                </a>
+                <a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                    href="#">
+                    <span class="material-symbols-outlined">dashboard_customize</span>
+                    <span class="text-sm">Plantillas</span>
+                </a>
+                <a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                    href="#">
+                    <span class="material-symbols-outlined">settings</span>
+                    <span class="text-sm">Configuración</span>
+                </a>
+            </nav>
+            <div class="p-4 mt-auto border-t border-slate-100 dark:border-slate-800">
+                <div class="flex items-center gap-3 px-3 py-2">
+                    <div class="size-10 rounded-full bg-slate-200 dark:bg-slate-800 bg-cover bg-center"
+                        data-alt="User profile avatar placeholder"
+                        style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCXDsjpFMYei8oyfFIHSFHOmqwqjMt0mWm5dMlQslPq_jKFFMBDE17gbCWZdOSCFO6si2rHyPimy2Oj_xZHxMH48PS46_-fb1U7EhT258XlbjgCF6hfJ3E9la1U4BpSsXVcEm8no3HJZ0C9Ldl3SSuBtUhpZWnuNEOK7VuWHYw5gJdc78HfKqjDivj2dBeOq90uVdf30THy4q77qDxOrGCdoTDgu2d_VETkY3m6kjQt8Ia-x7fLIAQ2KTAV5adZ8HUslfNIBB6BkIg')">
+                    </div>
+                    <div class="flex flex-col overflow-hidden">
+                        <p class="text-sm font-semibold truncate">Alex Johnson</p>
+                        <p class="text-xs text-slate-500 truncate">Plan Enterprise</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+        <main class="flex-1 flex flex-col overflow-y-auto">
+            <header
+                class="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md px-8 py-4">
+                <div class="flex items-center gap-8 flex-1">
+                    <h2 class="text-xl font-bold tracking-tight">Panel de Control</h2>
+                    <div class="max-w-md w-full relative">
+                        <span
+                            class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+                        <input
+                            class="w-full bg-slate-100 dark:bg-slate-800 border-none rounded-xl py-2 pl-10 pr-4 text-sm focus:ring-2 focus:ring-primary/50 transition-all"
+                            placeholder="Buscar documentos..." type="text" />
+                    </div>
+                </div>
+                <div class="flex items-center gap-4">
+                    <button
+                        class="bg-primary text-white text-sm font-semibold px-4 py-2 rounded-lg hover:brightness-110 transition-all flex items-center gap-2"><span
+                            class="material-symbols-outlined text-lg">upload_file</span> Subir Documento</button>
+                    <div class="flex items-center gap-2 mr-2"><button
+                            class="text-xs font-bold px-2 py-1 rounded bg-primary text-white">ES</button><button
+                            class="text-xs font-medium px-2 py-1 rounded text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">EN</button>
+                    </div><button
+                        class="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                        id="theme-toggle"><span class="material-symbols-outlined">light_mode</span></button><button
+                        class="relative p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
+                        <span class="material-symbols-outlined">notifications</span>
+                        <span
+                            class="absolute top-2 right-2 size-2 bg-red-500 border-2 border-white dark:border-slate-900 rounded-full"></span>
+                    </button>
+                </div>
+            </header>
+            <div class="p-8">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <div
+                        class="bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-slate-500 dark:text-slate-400 text-sm font-medium">Total Procesados</span>
+                            <span
+                                class="text-emerald-500 text-xs font-bold bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-full">+12%</span>
+                        </div>
+                        <div class="text-3xl font-bold">1,234</div>
+                        <div class="mt-4 h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                            <div class="bg-primary h-full w-[75%]"></div>
+                        </div>
+                    </div>
+                    <div
+                        class="bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-slate-500 dark:text-slate-400 text-sm font-medium">Pendientes</span>
+                            <span
+                                class="text-amber-500 text-xs font-bold bg-amber-50 dark:bg-amber-500/10 px-2 py-0.5 rounded-full">-2%</span>
+                        </div>
+                        <div class="text-3xl font-bold">12</div>
+                        <div class="mt-4 h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                            <div class="bg-amber-400 h-full w-[15%]"></div>
+                        </div>
+                    </div>
+                    <div
+                        class="bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-slate-500 dark:text-slate-400 text-sm font-medium">Precisión</span>
+                            <span
+                                class="text-emerald-500 text-xs font-bold bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-full">+0.1%</span>
+                        </div>
+                        <div class="text-3xl font-bold">99.8%</div>
+                        <div class="mt-4 h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                            <div class="bg-emerald-500 h-full w-[99.8%]"></div>
+                        </div>
+                    </div>
+                </div>
+                <div
+                    class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+                    <div
+                        class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                        <h3 class="font-bold text-lg">Documentos Recientes</h3>
+                        <button class="text-primary text-sm font-semibold hover:underline">Ver todo</button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr
+                                    class="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider">
+                                    <th class="px-6 py-4">Nombre</th>
+                                    <th class="px-6 py-4">Fecha</th>
+                                    <th class="px-6 py-4">Estado</th>
+                                    <th class="px-6 py-4">Monto Total</th>
+                                    <th class="px-6 py-4 text-right">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+                                <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                    <td class="px-6 py-4">
+                                        <div class="flex items-center gap-3">
+                                            <span class="material-symbols-outlined text-primary">picture_as_pdf</span>
+                                            <span class="text-sm font-medium">Invoice_2023_001.pdf</span>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">Oct 24, 2023</td>
+                                    <td class="px-6 py-4">
+                                        <span
+                                            class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400"><span
+                                                class="size-1.5 rounded-full bg-emerald-500"></span> Procesado</span>
+                                    </td>
+                                    <td class="px-6 py-4 text-sm font-medium">$1,240.00</td>
+                                    <td class="px-6 py-4 text-right">
+                                        <button class="text-slate-400 hover:text-primary transition-colors">
+                                            <span class="material-symbols-outlined">visibility</span>
+                                        </button>
+                                        <button
+                                            class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 ml-2 transition-colors">
+                                            <span class="material-symbols-outlined">more_vert</span>
+                                        </button>
+                                    </td>
+                                </tr>
+                                <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                    <td class="px-6 py-4">
+                                        <div class="flex items-center gap-3">
+                                            <span class="material-symbols-outlined text-blue-500">image</span>
+                                            <span class="text-sm font-medium">Receipt_882.jpg</span>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">Oct 25, 2023</td>
+                                    <td class="px-6 py-4">
+                                        <span
+                                            class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400"><span
+                                                class="size-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+                                            Extrayendo</span>
+                                    </td>
+                                    <td class="px-6 py-4 text-sm font-medium">$45.20</td>
+                                    <td class="px-6 py-4 text-right">
+                                        <button class="text-slate-400 hover:text-red-500 transition-colors">
+                                            <span class="material-symbols-outlined">cancel</span>
+                                        </button>
+                                        <button
+                                            class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 ml-2 transition-colors">
+                                            <span class="material-symbols-outlined">more_vert</span>
+                                        </button>
+                                    </td>
+                                </tr>
+                                <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                    <td class="px-6 py-4">
+                                        <div class="flex items-center gap-3">
+                                            <span class="material-symbols-outlined text-slate-400">description</span>
+                                            <span class="text-sm font-medium">Contract_v2_final.pdf</span>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">Oct 25, 2023</td>
+                                    <td class="px-6 py-4">
+                                        <span
+                                            class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400"><span
+                                                class="size-1.5 rounded-full bg-rose-500"></span> Error</span>
+                                    </td>
+                                    <td class="px-6 py-4 text-sm font-medium text-slate-400">N/A</td>
+                                    <td class="px-6 py-4 text-right">
+                                        <button
+                                            class="text-primary text-xs font-bold uppercase tracking-wide px-3 py-1 bg-primary/10 rounded-lg hover:bg-primary/20 transition-colors">Reintentar</button>
+                                    </td>
+                                </tr>
+                                <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                    <td class="px-6 py-4">
+                                        <div class="flex items-center gap-3">
+                                            <span class="material-symbols-outlined text-primary">picture_as_pdf</span>
+                                            <span class="text-sm font-medium">Monthly_Report_Q3.pdf</span>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">Oct 23, 2023</td>
+                                    <td class="px-6 py-4">
+                                        <span
+                                            class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400"><span
+                                                class="size-1.5 rounded-full bg-emerald-500"></span> Procesado</span>
+                                    </td>
+                                    <td class="px-6 py-4 text-sm font-medium">$8,902.50</td>
+                                    <td class="px-6 py-4 text-right">
+                                        <button class="text-slate-400 hover:text-primary transition-colors">
+                                            <span class="material-symbols-outlined">visibility</span>
+                                        </button>
+                                        <button
+                                            class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 ml-2 transition-colors">
+                                            <span class="material-symbols-outlined">more_vert</span>
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div
+                        class="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500">
+                        <span>Mostrando 4 de 1,234 documentos</span>
+                        <div class="flex gap-2">
+                            <button
+                                class="p-1 border border-slate-200 dark:border-slate-700 rounded hover:bg-slate-100 dark:hover:bg-slate-800">
+                                <span class="material-symbols-outlined text-sm">⬅</span>
+                            </button>
+                            <button
+                                class="p-1 border border-slate-200 dark:border-slate-700 rounded hover:bg-slate-100 dark:hover:bg-slate-800">
+                                <span class="material-symbols-outlined text-sm">➡</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</body>
+
+</html>
