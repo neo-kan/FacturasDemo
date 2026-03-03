@@ -243,8 +243,8 @@
         <div id="resultsContainer" class="hidden">
             <div id="documentSide">
                 <div id="documentWrapper">
-                    <img id="ocrPreview" alt="Documento procesado">
-                    <!-- <canvas  id="ocrPreview"></canvas> -->
+                    <img id="ocrImage" alt="Documento procesado" style="display:none;">
+                    <canvas id="ocrCanvas" style="display:none;"></canvas>
                     <div id="overlayContainer"></div>
                 </div>
             </div>
@@ -306,13 +306,21 @@
         const processBtn = document.getElementById('processBtn');
         const loader = document.getElementById('loader');
         const confirmForm = document.getElementById('confirmForm');
-        const ocrPreview = document.getElementById('ocrPreview');
+
+        const ocrImage = document.getElementById('ocrImage');
+        const ocrCanvas = document.getElementById('ocrCanvas');
+
         const overlayContainer = document.getElementById('overlayContainer');
         const resultInfo = document.getElementById('resultInfo');
         const lineItemsTbody = document.querySelector('#lineItemsTable tbody');
         const resultsContainer = document.getElementById('resultsContainer');
         const prevBtn = document.getElementById('prevResultBtn');
         const nextBtn = document.getElementById('nextResultBtn');
+
+        const ocrPreview = {
+            _objectURL: null,
+            src: ocrImage
+        };
 
         let fileGen = null;
         let listaDocumentos = [];
@@ -378,6 +386,35 @@
             }
 
             return null;
+        }
+
+        async function loadPreview(blob) {
+            if (ocrPreview._objectURL) URL.revokeObjectURL(ocrPreview._objectURL);
+            ocrPreview._objectURL = URL.createObjectURL(blob);
+
+            if (blob.type === "application/pdf") {
+                // Renderizar primera página del PDF en canvas
+                const arrayBuffer = await blob.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                const page = await pdf.getPage(1);
+                const viewport = page.getViewport({ scale: 1 });
+                ocrCanvas.width = viewport.width;
+                ocrCanvas.height = viewport.height;
+                await page.render({ canvasContext: ocrCanvas.getContext('2d'), viewport }).promise;
+
+                ocrCanvas.style.display = 'block';
+                ocrImage.style.display = 'none';
+            } else {
+                // Mostrar imagen normal
+                ocrImage.src = ocrPreview._objectURL;
+                ocrImage.style.display = 'block';
+                ocrCanvas.style.display = 'none';
+
+                await new Promise(resolve => {
+                    if (ocrImage.complete && ocrImage.naturalWidth) resolve();
+                    else { ocrImage.onload = () => resolve(); ocrImage.onerror = () => resolve(); }
+                });
+            }
         }
 
         /* Extrae un listado uniforme de campos detectados por el agente */
@@ -721,12 +758,12 @@
             const progressHtml = document.createElement('div');
             progressHtml.style.textAlign = "center";
             progressHtml.innerHTML = `
-        <div class="spinner" style="margin: 10px auto;"></div>
-        <div style="margin-top:12px;">
-            <div id="progressText">Procesando 0 / ${processingQueue.length}</div>
-            <div id="progressDetail" style="font-size:12px;color:#666;margin-top:6px;"></div>
-        </div>
-    `;
+                                <div class="spinner" style="margin: 10px auto;"></div>
+                                <div style="margin-top:12px;">
+                                    <div id="progressText">Procesando 0 / ${processingQueue.length}</div>
+                                    <div id="progressDetail" style="font-size:12px;color:#666;margin-top:6px;"></div>
+                                </div>
+                            `;
             Swal.fire({ title: "Procesando documentos", html: progressHtml, allowOutsideClick: false, allowEscapeKey: false, showConfirmButton: false });
 
             // enviar cada item a n8n (local por defecto)
@@ -812,22 +849,33 @@
             resultInfo.innerText = `${i + 1} / ${processingResults.length} — ${r.name}`;
 
             // cargar imagen desde blob
-            if (ocrPreview._objectURL) URL.revokeObjectURL(ocrPreview._objectURL);
-            ocrPreview._objectURL = URL.createObjectURL(r.blob);
-            ocrPreview.src = ocrPreview._objectURL;
+            // if (ocrPreview._objectURL) URL.revokeObjectURL(ocrPreview._objectURL);
+            // ocrPreview._objectURL = URL.createObjectURL(r.blob);
+            // ocrPreview.src = ocrPreview._objectURL;
 
-            await new Promise(resolve => {
-                if (ocrPreview.complete && ocrPreview.naturalWidth) resolve();
-                else {
-                    ocrPreview.onload = () => resolve();
-                    ocrPreview.onerror = () => resolve();
-                }
-            });
+            // await new Promise(resolve => {
+            //     if (ocrPreview.complete && ocrPreview.naturalWidth) resolve();
+            //     else {
+            //         ocrPreview.onload = () => resolve();
+            //         ocrPreview.onerror = () => resolve();
+            //     }
+            // });
 
-            const naturalW = ocrPreview.naturalWidth || ocrPreview.width;
-            const naturalH = ocrPreview.naturalHeight || ocrPreview.height;
-            const displayedW = ocrPreview.clientWidth;
-            const displayedH = ocrPreview.clientHeight;
+            // const naturalW = ocrPreview.naturalWidth || ocrPreview.width;
+            // const naturalH = ocrPreview.naturalHeight || ocrPreview.height;
+            // const displayedW = ocrPreview.clientWidth;
+            // const displayedH = ocrPreview.clientHeight;
+            await loadPreview(r.blob);
+
+            const naturalW = (ocrImage.style.display !== 'none' ? ocrImage.naturalWidth : ocrCanvas.width);
+            const naturalH = (ocrImage.style.display !== 'none' ? ocrImage.naturalHeight : ocrCanvas.height);
+            const displayedW = (ocrImage.style.display !== 'none' ? ocrImage.clientWidth : ocrCanvas.clientWidth);
+            const displayedH = (ocrImage.style.display !== 'none' ? ocrImage.clientHeight : ocrCanvas.clientHeight);
+
+            overlayContainer.innerHTML = "";
+            overlayContainer.style.width = displayedW + 'px';
+            overlayContainer.style.height = displayedH + 'px';
+
             const scaleX = displayedW / naturalW;
             const scaleY = displayedH / naturalH;
 
