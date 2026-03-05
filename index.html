@@ -180,7 +180,7 @@
             position: absolute;
             top: 0;
             left: 0;
-            pointer-events: auto;
+            pointer-events: none;
         }
 
         #formSide {
@@ -198,6 +198,9 @@
             text-overflow: ellipsis;
             padding: 2px;
             cursor: pointer;
+
+            pointer-events: auto;
+            box-sizing: border-box;
         }
 
         .ocr-chip {
@@ -241,8 +244,8 @@
         </div>
 
         <div style="margin-top:14px; display:flex; gap:8px;flex-direction: row-reverse;">
-            <button id="prevResultBtn">Anterior</button>
             <button id="nextResultBtn">Siguiente</button>
+            <button id="prevResultBtn">Anterior</button>
         </div>
 
         <div id="resultsContainer" class="hidden">
@@ -417,122 +420,143 @@
             }
         }
 
-        /* Extrae un listado uniforme de campos detectados por el agente */
+        /* Extrae un listado de todos los campos del ocr y filtrarlos pos tipo de block */
         function extractOcrFieldsFromAgent(invoice, naturalW, naturalH) {
             const out = [];
+            const seen = new Set();
             if (!invoice || typeof invoice !== 'object') return out;
+            if (!Array.isArray(invoice.pages)) return out;
 
-            /* ----------------------------------
-               1️⃣ BLOQUES REALES DE DOCUMENT AI
-               pages[].blocks[].layout.boundingPoly
-            ---------------------------------- */
-            if (Array.isArray(invoice.pages)) {
-                invoice.pages.forEach(page => {
-                    if (!Array.isArray(page.blocks)) return;
+            invoice.pages.forEach((page, pi) => {
+                if (!Array.isArray(page.blocks)) return;
 
-                    page.blocks.forEach(block => {
-                        const text = block.text || block.layout?.text || '';
-                        const poly = block.layout?.boundingPoly;
-
-                        if (!text || !poly) return;
-
-                        const bbox = normalizeBboxToPixels(poly, naturalW, naturalH);
-
-                        out.push({
-                            key: block.type || 'block',
-                            value: String(text),
-                            bbox
-                        });
-                    });
+                // 1) Calcular extents de coordenadas en la página (si vienen en px de otra resolución)
+                //    esto nos permite mapear de la "referencia del OCR" -> referencia naturalW/naturalH
+                let pageMaxX = 0, pageMaxY = 0, hasAbsoluteCoords = false, hasNormalized = false;
+                page.blocks.forEach(block => {
+                    const poly = block.boundingPoly ?? block.bbox;
+                    if (!poly) return;
+                    if (Array.isArray(poly)) {
+                        poly.forEach(p => { if (typeof p.x === 'number') { pageMaxX = Math.max(pageMaxX, p.x); } if (typeof p.y === 'number') { pageMaxY = Math.max(pageMaxY, p.y); } });
+                        hasAbsoluteCoords = true;
+                    } else if (poly.vertices && Array.isArray(poly.vertices)) {
+                        poly.vertices.forEach(p => { if (typeof p.x === 'number') pageMaxX = Math.max(pageMaxX, p.x); if (typeof p.y === 'number') pageMaxY = Math.max(pageMaxY, p.y); });
+                        hasAbsoluteCoords = true;
+                    } else if (poly.normalizedVertices && Array.isArray(poly.normalizedVertices)) {
+                        // normalized vertices in [0..1] → page extent is 1.0
+                        hasNormalized = true;
+                        pageMaxX = Math.max(pageMaxX, 1);
+                        pageMaxY = Math.max(pageMaxY, 1);
+                    } else if ('right' in poly && 'bottom' in poly) {
+                        pageMaxX = Math.max(pageMaxX, poly.right);
+                        pageMaxY = Math.max(pageMaxY, poly.bottom);
+                        hasAbsoluteCoords = true;
+                    }
                 });
-            }
 
-            /* ----------------------------------
-               2️⃣ OCR_FIELDS (si existen)
-            ---------------------------------- */
-            if (Array.isArray(invoice.ocr_fields)) {
-                invoice.ocr_fields.forEach(f => {
-                    const bbox = f.bbox
-                        ? normalizeBboxToPixels(f.bbox, naturalW, naturalH)
-                        : null;
+                // If pageMaxX/Y are still zero, fallback to natural dimensions (avoid division by zero).
+                if (!pageMaxX) pageMaxX = naturalW;
+                if (!pageMaxY) pageMaxY = naturalH;
 
+                // mapping factors from OCR coordinate space -> natural image pixels
+                const factorX = naturalW / pageMaxX;
+                const factorY = naturalH / pageMaxY;
+
+                // 2) ahora extraemos bloques y reescalamos cada bbox a la referencia naturalW/naturalH
+                page.blocks.forEach((block, bi) => {
+                    const cleanText = (block.text || "").trim();
+                    if (!cleanText) return;
+                    if (cleanText.length < 3 || cleanText.length > 120) return;
+                    if (seen.has(cleanText)) return;
+                    seen.add(cleanText);
+
+                    const allowedTypes = ['FORM_FIELD', 'PARAGRAPH'];
+                    if (!allowedTypes.includes(block.type)) return;
+
+                    const poly = block.boundingPoly ?? block.bbox;
+                    if (!poly) return;
+
+                    let left = NaN, top = NaN, right = NaN, bottom = NaN;
+
+                    // CASE A: array of points [{x,y},...]
+                    if (Array.isArray(poly)) {
+                        const xs = poly.map(p => (p?.x ?? 0));
+                        const ys = poly.map(p => (p?.y ?? 0));
+                        left = Math.min(...xs);
+                        top = Math.min(...ys);
+                        right = Math.max(...xs);
+                        bottom = Math.max(...ys);
+                    }
+                    // CASE B: object with vertices or normalizedVertices
+                    else if (Array.isArray(poly.vertices)) {
+                        const xs = poly.vertices.map(p => (p?.x ?? 0));
+                        const ys = poly.vertices.map(p => (p?.y ?? 0));
+                        left = Math.min(...xs);
+                        top = Math.min(...ys);
+                        right = Math.max(...xs);
+                        bottom = Math.max(...ys);
+                    } else if (Array.isArray(poly.normalizedVertices)) {
+                        const xs = poly.normalizedVertices.map(p => (p?.x ?? 0));
+                        const ys = poly.normalizedVertices.map(p => (p?.y ?? 0));
+                        // normalized in 0..1 -> multiply by natural dims
+                        left = Math.min(...xs) * naturalW;
+                        top = Math.min(...ys) * naturalH;
+                        right = Math.max(...xs) * naturalW;
+                        bottom = Math.max(...ys) * naturalH;
+                    }
+                    // CASE C: left/top/right/bottom or x/y/width/height-like
+                    else if ('left' in poly && 'top' in poly) {
+                        left = poly.left;
+                        top = poly.top;
+                        if ('right' in poly && 'bottom' in poly) {
+                            right = poly.right;
+                            bottom = poly.bottom;
+                        } else if ('width' in poly && 'height' in poly) {
+                            right = left + poly.width;
+                            bottom = top + poly.height;
+                        }
+                    } else if ('x' in poly && 'y' in poly && ('width' in poly || 'w' in poly)) {
+                        left = poly.x;
+                        top = poly.y;
+                        right = left + (poly.width ?? poly.w ?? 0);
+                        bottom = top + (poly.height ?? poly.h ?? 0);
+                    } else if ('x1' in poly && 'y1' in poly && 'x2' in poly && 'y2' in poly) {
+                        left = poly.x1; top = poly.y1; right = poly.x2; bottom = poly.y2;
+                    }
+
+                    // si no hemos podido obtener coordenadas válidas, saltar
+                    if (!isFinite(left) || !isFinite(top) || !isFinite(right) || !isFinite(bottom)) return;
+
+                    // 3) Reescalar según la referencia detectada en la página
+                    //    (si los coords vinieron en una resolución mayor, factorX/ factorY los reduce a naturalW/naturalH)
+                    const mappedX = left * factorX;
+                    const mappedY = top * factorY;
+                    const mappedW = (right - left) * factorX;
+                    const mappedH = (bottom - top) * factorY;
+
+                    // sanity clamp (opcional)
+                    const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+                    const bbox = {
+                        x: clamp(mappedX, 0, naturalW),
+                        y: clamp(mappedY, 0, naturalH),
+                        width: clamp(mappedW, 0, naturalW),
+                        height: clamp(mappedH, 0, naturalH)
+                    };
+
+                    //if (bbox.width > naturalW * 0.8) return;
+                    //if (bbox.height > naturalH * 0.3) return;
+                    //if (bbox.width < 10 || bbox.height < 10) return;
+
+                    // push
                     out.push({
-                        key: f.key ?? f.name ?? 'field',
-                        value: String(f.value ?? f.text ?? ''),
+                        key: block.type || `pages[${pi}].blocks[${bi}]`,
+                        value: cleanText,
                         bbox
                     });
                 });
-            }
-
-            /* ----------------------------------
-               3️⃣ FIELDS MAP
-            ---------------------------------- */
-            if (invoice.fields && typeof invoice.fields === 'object') {
-                for (const [k, v] of Object.entries(invoice.fields)) {
-                    if (!v) continue;
-
-                    if (typeof v === 'string' || typeof v === 'number') {
-                        out.push({ key: k, value: String(v), bbox: null });
-                    } else {
-                        const text = v.text || v.value || '';
-                        const bbox = v.bbox
-                            ? normalizeBboxToPixels(v.bbox, naturalW, naturalH)
-                            : null;
-
-                        out.push({
-                            key: k,
-                            value: String(text),
-                            bbox
-                        });
-                    }
-                }
-            }
-
-            /* ----------------------------------
-               4️⃣ CAMPOS PLANOS DEL AGENTE
-            ---------------------------------- */
-            const knownKeys = [
-                'invoice_id',
-                'invoice_date',
-                'supplier_name',
-                'supplier_tax_id',
-                'supplier_address',
-                'supplier_phone',
-                'supplier_email',
-                'receiver_tax_id',
-                'net_amount',
-                'total_tax_amount',
-                'total_amount',
-                'payment_terms',
-                'due_date',
-                'currency'
-            ];
-
-            knownKeys.forEach(k => {
-                if (invoice[k] !== undefined && invoice[k] !== null) {
-                    out.push({
-                        key: k,
-                        value: String(invoice[k]),
-                        bbox: null
-                    });
-                }
             });
 
-            /* ----------------------------------
-               5️⃣ ELIMINAR DUPLICADOS
-            ---------------------------------- */
-            const uniq = [];
-            const seen = new Set();
-
-            out.forEach(f => {
-                const id = `${f.key}:::${f.value}`;
-                if (!seen.has(id)) {
-                    seen.add(id);
-                    uniq.push(f);
-                }
-            });
-
-            return uniq;
+            return out;
         }
 
         /* ----------------------------
@@ -781,7 +805,7 @@
 
                 try {
                     // intenta local, si falla usa remoto
-                    let res = await fetch(N8N_WEBHOOK_URL, { method: "POST", body: formData });
+                    let res = await fetch(N8N_LOCAL, { method: "POST", body: formData });
                     if (!res.ok) {
                         // intenta remoto
                         res = await fetch(N8N_WEBHOOK_URL, { method: "POST", body: formData });
@@ -845,66 +869,67 @@
 
         async function renderIndex(i) {
             const r = processingResults[i];
+            console.log(r)
             currentIndex = i;
             resultInfo.innerText = `${i + 1} / ${processingResults.length} — ${r.name}`;
 
-            // cargar imagen desde blob
-            // if (ocrPreview._objectURL) URL.revokeObjectURL(ocrPreview._objectURL);
-            // ocrPreview._objectURL = URL.createObjectURL(r.blob);
-            // ocrPreview.src = ocrPreview._objectURL;
-
-            // await new Promise(resolve => {
-            //     if (ocrPreview.complete && ocrPreview.naturalWidth) resolve();
-            //     else {
-            //         ocrPreview.onload = () => resolve();
-            //         ocrPreview.onerror = () => resolve();
-            //     }
-            // });
-
-            // const naturalW = ocrPreview.naturalWidth || ocrPreview.width;
-            // const naturalH = ocrPreview.naturalHeight || ocrPreview.height;
-            // const displayedW = ocrPreview.clientWidth;
-            // const displayedH = ocrPreview.clientHeight;
             await loadPreview(r.blob);
 
             const naturalW = (ocrImage.style.display !== 'none' ? ocrImage.naturalWidth : ocrCanvas.width);
             const naturalH = (ocrImage.style.display !== 'none' ? ocrImage.naturalHeight : ocrCanvas.height);
-            const displayedW = (ocrImage.style.display !== 'none' ? ocrImage.clientWidth : ocrCanvas.clientWidth);
-            const displayedH = (ocrImage.style.display !== 'none' ? ocrImage.clientHeight : ocrCanvas.clientHeight);
 
+            const targetEl = ocrImage.style.display !== 'none' ? ocrImage : ocrCanvas;
+
+            // overlay se posicionará dentro de #documentWrapper (que ya es position:relative)
             overlayContainer.innerHTML = "";
-            overlayContainer.style.width = displayedW + 'px';
-            overlayContainer.style.height = displayedH + 'px';
 
+            // IMPORTANT: el contenedor debe tener las dimensiones NATURALES de la página/doc,
+            // porque las posiciones de los boxes están en esas unidades.
+            overlayContainer.style.position = 'absolute';
+            overlayContainer.style.top = targetEl.offsetTop + 'px';
+            overlayContainer.style.left = targetEl.offsetLeft + 'px';
+            overlayContainer.style.width = naturalW + 'px';
+            overlayContainer.style.height = naturalH + 'px';
+            overlayContainer.style.transformOrigin = 'top left';
+            // dejar pointer-events none en el overlay para que no bloquee la imagen,
+            // pero los .ocr-box tendrán pointer-events:auto para recibir clicks/drag.
+            overlayContainer.style.pointerEvents = 'none';
+            //Prueabas
+            overlayContainer.style.outline = '1px dashed red';
+
+            // calculamos el factor de visualización (cómo aparece la imagen en pantalla)
+            const displayedW = targetEl.clientWidth;
+            const displayedH = targetEl.clientHeight;
             const scaleX = displayedW / naturalW;
             const scaleY = displayedH / naturalH;
 
-            overlayContainer.innerHTML = "";
-            overlayContainer.style.width = displayedW + 'px';
-            overlayContainer.style.height = displayedH + 'px';
+            overlayContainer.style.transform = `scale(${scaleX}, ${scaleY})`;
 
             let invoice = r.response;
+            console.log(invoice)
             if (Array.isArray(invoice)) invoice = invoice[0];
-
+            //console.log(invoice)
             const ocrFields = extractOcrFieldsFromAgent(invoice, naturalW, naturalH);
 
             // si hay bbox, dibujarlos
             if (ocrFields.some(f => f.bbox)) {
                 ocrFields.forEach(f => {
                     if (!f.bbox) return;
-                    const bx = (f.bbox.x || 0) * scaleX;
-                    const by = (f.bbox.y || 0) * scaleY;
-                    const bw = (f.bbox.width || 10) * scaleX;
-                    const bh = (f.bbox.height || 10) * scaleY;
+
+                    const bx = f.bbox.x;
+                    const by = f.bbox.y;
+                    const bw = f.bbox.width;
+                    const bh = f.bbox.height;
 
                     const box = document.createElement('div');
                     box.className = 'ocr-box';
-                    box.style.left = bx + 'px';
-                    box.style.top = by + 'px';
-                    box.style.width = bw + 'px';
-                    box.style.height = bh + 'px';
-                    box.title = `${f.key}: ${f.value}`;
-                    box.innerText = String(f.value).slice(0, 80);
+                    box.style.position = 'absolute';
+                    box.style.left = `${bx}px`;
+                    box.style.top = `${by}px`;
+                    box.style.width = `${bw}px`;
+                    box.style.height = `${bh}px`;
+                    box.title = f.value;
+                    //box.innerText = String(f.value).slice(0, 80);
 
                     box.draggable = true;
                     box.addEventListener('dragstart', (ev) => {
@@ -925,16 +950,6 @@
 
                 const textual = [];
                 if (invoice && typeof invoice === 'object') {
-                    if (invoice.fields && typeof invoice.fields === 'object') {
-                        for (const [k, v] of Object.entries(invoice.fields)) {
-                            if (v == null) continue;
-                            if (typeof v === 'string' || typeof v === 'number') textual.push({ key: k, value: String(v) });
-                            else textual.push({ key: k, value: String(v.text || v.value || '') });
-                        }
-                    }
-                    if (Array.isArray(invoice.ocr_fields)) {
-                        invoice.ocr_fields.forEach(f => textual.push({ key: f.key || f.name || 'field', value: String(f.value || f.text || '') }));
-                    }
                     const known = ['invoice_id', 'invoice_date', 'supplier_name', 'supplier_tax_id', 'total_amount', 'net_amount', 'total_tax_amount', 'currency'];
                     known.forEach(k => { if (invoice[k] !== undefined && invoice[k] !== null) textual.push({ key: k, value: String(invoice[k]) }); });
 
@@ -943,6 +958,8 @@
                         if (typeof v === 'string' || typeof v === 'number') textual.push({ key: k, value: String(v) });
                         else if (v && typeof v === 'object' && ('value' in v || 'text' in v)) textual.push({ key: k, value: String(v.value || v.text || '') });
                     }
+
+                    textual.push(...ocrFields)
                 }
 
                 if (textual.length === 0) {
@@ -965,8 +982,8 @@
                     });
                     overlayContainer.appendChild(list);
                 }
+                console.log(textual)
             }
-
             // drop handlers en inputs (mantenemos idempotencia)
             document.querySelectorAll('#confirmForm input').forEach(input => {
                 input.addEventListener('dragover', ev => ev.preventDefault());
