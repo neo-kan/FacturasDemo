@@ -802,23 +802,49 @@
                 formData.append('pageIndex', (item.meta.pageIndex ?? ''));
 
                 try {
-                    // intenta local, si falla usa remoto
-                    let res = await fetch(N8N_LOCAL, { method: "POST", body: formData });
-                    if (!res.ok) {
-                        // intenta remoto
+                    let res;
+
+                    try {
+                        // intentar local
+                        res = await fetch(N8N_LOCAL, { method: "POST", body: formData });
+                    } catch (e) {
+                        console.warn("Local webhook falló, usando remoto...");
+                    }
+
+                    // si no hubo respuesta o no es ok → remoto
+                    if (!res || !res.ok) {
                         res = await fetch(N8N_WEBHOOK_URL, { method: "POST", body: formData });
                     }
+
                     const text = await res.text();
+
                     let data;
-                    try { data = JSON.parse(text); } catch { data = { raw: text }; }
+                    try {
+                        data = JSON.parse(text);
+                    } catch {
+                        data = { raw: text };
+                    }
 
-                    //console.log(text)
+                    processingResults.push({
+                        queueIndex: i,
+                        name: item.name,
+                        response: data,
+                        blob: item.blob
+                    });
 
-                    processingResults.push({ queueIndex: i, name: item.name, response: data, blob: item.blob });
                     if (progressDetail) progressDetail.innerText = `Procesado: ${item.name}`;
+
                 } catch (err) {
+
                     console.error("Error procesando item:", item, err);
-                    processingResults.push({ queueIndex: i, name: item.name, response: { error: String(err) }, blob: item.blob });
+
+                    processingResults.push({
+                        queueIndex: i,
+                        name: item.name,
+                        response: { error: String(err) },
+                        blob: item.blob
+                    });
+
                     if (progressDetail) progressDetail.innerText = `Error procesando ${item.name}`;
                 }
             }
