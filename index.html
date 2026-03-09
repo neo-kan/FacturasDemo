@@ -191,6 +191,13 @@
             width: 420px;
         }
 
+        #ocrImage {
+            display: block;
+            width: auto;
+            /* o width: 100%; si quieres escalar al contenedor */
+            max-width: none;
+        }
+
         .ocr-box {
             position: absolute;
             border: 2px solid rgba(0, 123, 255, 0.9);
@@ -336,6 +343,8 @@
             src: ocrImage
         };
 
+        const PDF_RENDER_SCALE = 3;
+
         let fileGen = null;
         let listaDocumentos = [];
         let pdfRunTogether = true;
@@ -346,69 +355,12 @@
         /* mapping simple para inputs */
         const fieldMap = { invoice_id: 'invoiceNumber', invoice_date: 'invoiceDate', supplier_tax_id: 'supplierNIF', total_amount: 'total', total: 'total' };
 
-        /* ----------------------------
-           HELPERS: bounding normalization (soporta varios formatos)
-           ---------------------------- */
-        function normalizeBboxToPixels(bbox, naturalW, naturalH) {
-            if (!bbox) return null;
-
-            // normalizedVertices
-            if (Array.isArray(bbox.normalizedVertices) && bbox.normalizedVertices.length) {
-                const verts = bbox.normalizedVertices;
-                const xs = verts.map(v => (v.x ?? 0) * naturalW);
-                const ys = verts.map(v => (v.y ?? 0) * naturalH);
-                const left = Math.min(...xs), top = Math.min(...ys);
-                return { x: left, y: top, width: Math.max(...xs) - left, height: Math.max(...ys) - top };
-            }
-
-            // vertices absolute array
-            if (Array.isArray(bbox.vertices) && bbox.vertices.length) {
-                const verts = bbox.vertices;
-                const xs = verts.map(v => v.x ?? 0);
-                const ys = verts.map(v => v.y ?? 0);
-                const left = Math.min(...xs), top = Math.min(...ys);
-                return { x: left, y: top, width: Math.max(...xs) - left, height: Math.max(...ys) - top };
-            }
-
-            // left/top/right/bottom or left/top/width/height
-            if ('left' in bbox && 'top' in bbox) {
-                const left = bbox.left;
-                const top = bbox.top;
-                const width = ('width' in bbox) ? bbox.width : (('right' in bbox) ? bbox.right - bbox.left : 0);
-                const height = ('height' in bbox) ? bbox.height : (('bottom' in bbox) ? bbox.bottom - bbox.top : 0);
-                if (left <= 1 && top <= 1 && width <= 1 && height <= 1) return { x: left * naturalW, y: top * naturalH, width: width * naturalW, height: height * naturalH };
-                return { x: left, y: top, width, height };
-            }
-
-            // x,y,width,height (maybe normalized)
-            if ('x' in bbox && 'y' in bbox && ('width' in bbox || 'w' in bbox)) {
-                const w = bbox.width ?? bbox.w;
-                const h = bbox.height ?? bbox.h ?? 0;
-                if (bbox.x <= 1 && bbox.y <= 1 && w <= 1 && h <= 1) {
-                    return { x: bbox.x * naturalW, y: bbox.y * naturalH, width: w * naturalW, height: h * naturalH };
-                }
-                return { x: bbox.x, y: bbox.y, width: w, height: h };
-            }
-
-            // x1,y1,x2,y2
-            if ('x1' in bbox && 'y1' in bbox && 'x2' in bbox && 'y2' in bbox) {
-                const left = bbox.x1, top = bbox.y1, width = bbox.x2 - bbox.x1, height = bbox.y2 - bbox.y1;
-                if (left <= 1 && top <= 1 && width <= 1 && height <= 1) {
-                    return { x: left * naturalW, y: top * naturalH, width: width * naturalW, height: height * naturalH };
-                }
-                return { x: left, y: top, width, height };
-            }
-
-            return null;
-        }
-
-        async function pdfToImage(file) {
+        async function pdfToImage(file, pageIndex = 0) {
             const arrayBuffer = await file.arrayBuffer();
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-            const page = await pdf.getPage(1);
+            const page = await pdf.getPage(pageIndex + 1);
 
-            const scale = 3;
-            const viewport = page.getViewport({ scale });
+            const viewport = page.getViewport({ scale: PDF_RENDER_SCALE });
 
             const canvas = document.createElement("canvas");
             const context = canvas.getContext("2d");
@@ -439,9 +391,10 @@
                 const page = await pdf.getPage(1);
 
                 const scale = 4;
-                const viewport = page.getViewport({ scale });
+                const viewport = page.getViewport({ scale: PDF_RENDER_SCALE });
 
                 const canvas = document.createElement("canvas");
+
                 const ctx = canvas.getContext("2d");
 
                 canvas.width = viewport.width;
@@ -452,8 +405,8 @@
                     viewport: viewport
                 }).promise;
 
+                //Desacer cambio si es mejor usar conversor de pdf a image
                 const imgData = canvas.toDataURL("image/png");
-
                 ocrImage.src = imgData;
                 ocrImage.style.display = "block";
                 ocrCanvas.style.display = "none";
@@ -463,7 +416,6 @@
                 });
 
             } else {
-
                 ocrPreview._objectURL = URL.createObjectURL(blob);
 
                 ocrImage.src = ocrPreview._objectURL;
@@ -471,8 +423,11 @@
                 ocrCanvas.style.display = "none";
 
                 await new Promise(resolve => {
-                    if (ocrImage.complete) resolve();
-                    else ocrImage.onload = resolve;
+                    ocrImage.onload = () => {
+                        ocrImage.width = ocrImage.naturalWidth;
+                        ocrImage.height = ocrImage.naturalHeight;
+                        resolve();
+                    };;
                 });
             }
         }
@@ -507,8 +462,8 @@
 
                     else if (Array.isArray(poly.normalizedVertices)) {
                         vertices = poly.normalizedVertices.map(v => ({
-                            x: v.x,
-                            y: v.y
+                            x: v.x * naturalW,
+                            y: v.y * naturalH
                         }));
                     }
 
@@ -741,28 +696,62 @@
                     return;
                 }
                 try {
-                    const arrayBuffer = await fileGen.arrayBuffer();
-                    const pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer);
 
                     if (pdfRunTogether) {
-                        const newPdf = await PDFLib.PDFDocument.create();
-                        const copiedPages = await newPdf.copyPages(pdfDoc, listaDocumentos);
-                        copiedPages.forEach(p => newPdf.addPage(p));
-                        const bytes = await newPdf.save();
-                        const blob = new Blob([bytes], { type: "application/pdf" });
-                        processingQueue.push({ blob, name: fileGen.name.replace(/\.pdf$/i, '') + "_seleccion.pdf", sourceType: "pdf", meta: { originalName: fileGen.name } });
+                        const arrayBuffer = await fileGen.arrayBuffer();
+                        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+                        const canvas = document.createElement("canvas");
+                        const ctx = canvas.getContext("2d");
+
+                        let maxWidth = 0;
+                        let totalHeight = 0;
+                        const pagesImages = [];
+
+                        // Renderizar páginas seleccionadas
+                        for (const pageIndex of listaDocumentos) {
+                            const page = await pdf.getPage(pageIndex + 1);
+                            const viewport = page.getViewport({ scale: PDF_RENDER_SCALE });
+                            const pageCanvas = document.createElement("canvas");
+                            pageCanvas.width = viewport.width;
+                            pageCanvas.height = viewport.height;
+                            await page.render({ canvasContext: pageCanvas.getContext("2d"), viewport }).promise;
+
+                            pagesImages.push(pageCanvas);
+                            maxWidth = Math.max(maxWidth, viewport.width);
+                            totalHeight += viewport.height;
+                        }
+
+                        // Combinar horizontalmente
+                        canvas.width = maxWidth;
+                        canvas.height = totalHeight;
+                        let offsetY = 0;
+                        pagesImages.forEach(pc => {
+                            ctx.drawImage(pc, 0, offsetY);
+                            offsetY += pc.height;
+                        });
+
+                        const imgBlob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+                        processingQueue.push({
+                            blob: imgBlob,
+                            name: fileGen.name.replace(/\.pdf$/i, '') + "_seleccion.png",
+                            sourceType: "image",
+                            meta: { originalName: fileGen.name }
+                        });
                     } else {
                         for (const pageIndex of listaDocumentos) {
-                            const newPdf = await PDFLib.PDFDocument.create();
-                            const [copied] = await newPdf.copyPages(pdfDoc, [pageIndex]);
-                            newPdf.addPage(copied);
-                            const bytes = await newPdf.save();
-                            const blob = new Blob([bytes], { type: "application/pdf" });
-                            processingQueue.push({ blob, name: fileGen.name.replace(/\.pdf$/i, '') + `_p${pageIndex + 1}.pdf`, sourceType: "pdf-page", meta: { originalName: fileGen.name, pageIndex } });
+                            const img = await pdfToImage(fileGen, pageIndex);
+                            const imgBlob = await fetch(img.src).then(r => r.blob());
+                            processingQueue.push({
+                                blob: imgBlob,
+                                name: fileGen.name.replace(/\.pdf$/i, '') + `_p${pageIndex + 1}.png`,
+                                sourceType: "image",
+                                meta: { originalName: fileGen.name, pageIndex }
+                            });
                         }
                     }
                 } catch (err) {
-                    console.error("Error creando PDFs:", err);
+                    console.error("Error creando PDFs o imagenes:", err);
                     Swal.fire("Error", "No se pudo preparar el PDF.", "error");
                     return;
                 }
@@ -805,13 +794,11 @@
                     let res;
 
                     try {
-                        // intentar local
                         res = await fetch(N8N_LOCAL, { method: "POST", body: formData });
                     } catch (e) {
                         console.warn("Local webhook falló, usando remoto...");
                     }
 
-                    // si no hubo respuesta o no es ok → remoto
                     if (!res || !res.ok) {
                         res = await fetch(N8N_WEBHOOK_URL, { method: "POST", body: formData });
                     }
@@ -891,14 +878,19 @@
             }
         }
 
-        function drawOverlays(invoice, naturalW, naturalH, scaleX, scaleY) {
-
+        function drawOverlays(invoice, targetEl) {
             overlayContainer.innerHTML = '';
+
+            const rect = targetEl.getBoundingClientRect();
+            const naturalW = targetEl.naturalWidth || targetEl.width;
+            const naturalH = targetEl.naturalHeight || targetEl.height;
+
+            const scaleX = rect.width / naturalW;
+            const scaleY = rect.height / naturalH;
 
             const ocrFields = extractOcrFieldsFromAgent(invoice, naturalW, naturalH, ['FORM_FIELD', 'PARAGRAPH']) || [];
 
             ocrFields.forEach(f => {
-
                 if (!f.bbox) return;
 
                 const box = document.createElement('div');
@@ -909,13 +901,12 @@
                 const w = f.bbox.width * scaleX;
                 const h = f.bbox.height * scaleY;
 
-                box.style.left = `${Math.round(x)}px`;
-                box.style.top = `${Math.round(y)}px`;
-                box.style.width = `${Math.round(w)}px`;
-                box.style.height = `${Math.round(h)}px`;
+                box.style.left = `${x}px`;
+                box.style.top = `${y}px`;
+                box.style.width = `${w}px`;
+                box.style.height = `${h}px`;
 
                 box.title = f.value || '';
-
                 box.draggable = true;
 
                 box.addEventListener('dragstart', ev => {
@@ -926,9 +917,7 @@
                 box.addEventListener('click', () => setInputValueForKey(f.key, f.value));
 
                 overlayContainer.appendChild(box);
-
             });
-
         }
 
         async function renderIndex(i) {
@@ -947,36 +936,24 @@
             resultInfo.innerText = `${i + 1} / ${processingResults.length} — ${r.name || 'Sin nombre'}`;
 
             await loadPreview(r.blob);
-
-            //const targetEl = ocrImage.style.display !== 'none' ? ocrImage : ocrCanvas;
-
             await new Promise(resolve => requestAnimationFrame(resolve));
 
             let targetEl, naturalW, naturalH;
 
             if (ocrImage.style.display !== 'none') {
                 targetEl = ocrImage;
-                naturalW = ocrImage.naturalWidth;
-                naturalH = ocrImage.naturalHeight;
             } else {
                 targetEl = ocrCanvas;
-                naturalW = ocrCanvas.width;
-                naturalH = ocrCanvas.height;
-                // asegurarnos de mostrar el canvas
                 ocrCanvas.style.display = "block";
                 ocrImage.style.display = "none";
             }
-
-            const rect = targetEl.getBoundingClientRect();
-            const scaleX = rect.width / naturalW;
-            const scaleY = rect.height / naturalH;
 
             overlayContainer.style.position = 'absolute';
             overlayContainer.style.left = `0px`;
             overlayContainer.style.top = `0px`;
 
-            overlayContainer.style.width = `${rect.width}px`;
-            overlayContainer.style.height = `${rect.height}px`;
+            overlayContainer.style.width = `${targetEl.width}px`;
+            overlayContainer.style.height = `${targetEl.height}px`;
             overlayContainer.style.transform = 'none';
             overlayContainer.style.pointerEvents = 'auto';
 
@@ -984,7 +961,7 @@
             let invoice = r.response;
             if (Array.isArray(invoice)) invoice = invoice[0];
 
-            drawOverlays(invoice, naturalW, naturalH, scaleX, scaleY);
+            drawOverlays(invoice, targetEl);
 
             // Rellenar inputs
             ['invoice_id', 'invoice_date', 'supplier_tax_id', 'supplier_name', 'total_amount', 'total'].forEach(k => {
