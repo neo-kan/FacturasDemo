@@ -11,6 +11,12 @@ Por el momento, el sistema está enfocado principalmente en facturas, ya que tie
 
 La versión actual está pensada principalmente para experimentación y pruebas, por lo que algunas funcionalidades pueden estar incompletas o no funcionar correctamente con todos los documentos.
 
+🌐 Probar la demo
+
+Puedes probar la demo del proyecto aquí:
+
+https://facturas-demo.onrender.com
+
 🎯 Objetivo del proyecto
 
 El objetivo a largo plazo es desarrollar un sistema capaz de:
