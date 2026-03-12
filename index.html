@@ -31,6 +31,7 @@
         }
 
         .upload-card,
+        .search-card,
         .result,
         #confirmForm {
             background: #fff;
@@ -246,14 +247,21 @@
 
 <body>
     <div class="container">
-        <h1>Confirmación de Factura</h1>
-
-        <div class="upload-card">
-            <input type="file" id="fileInput" accept=".pdf,image/*" multiple hidden>
-            <p>Máximo 15 páginas, 20 MB como máximo</p>
-            <label for="fileInput" class="upload-button">📄 Subir factura</label>
-            <p id="fileName" class="file-name">Ningún archivo seleccionado</p>
-            <button id="processBtn" disabled>Procesar factura</button>
+        <div id="containerCampToOcr">
+            <div class="upload-card">
+                <input type="file" id="fileInput" accept=".pdf,image/*" multiple hidden>
+                <p>Máximo 15 páginas, 20 MB como máximo</p>
+                <label for="fileInput" class="upload-button">📄 Subir factura</label>
+                <p id="fileName" class="file-name">Ningún archivo seleccionado</p>
+                <button id="processBtn" disabled>Procesar factura</button>
+            </div>
+            <div class="search-card">
+                <p>Contenido a buscar</p>
+                <input id="contSearchClave" type="text" placeholder="Clave"> :
+                <input id="contSearchValor" type="text" placeholder="Valor">
+                <button id="contBtn">Añadir</button>
+                <button id="contFijoBtn">Contenidos fijos</button>
+            </div>
         </div>
 
         <div id="loader">
@@ -279,25 +287,7 @@
                 <div id="resultInfo" style="margin-bottom:10px; font-weight:bold;"></div>
 
                 <form id="confirmForm" class="hidden">
-                    <input id="invoiceNumber" placeholder="Invoice Number"><br>
-                    <input id="invoiceDate" placeholder="Invoice Date"><br>
-                    <input id="supplierNIF" placeholder="Supplier NIF"><br>
-                    <input id="total" placeholder="Total"><br>
-
-                    <table id="lineItemsTable">
-                        <thead>
-                            <tr>
-                                <th>Descripción</th>
-                                <th>Cantidad</th>
-                                <th>Precio</th>
-                                <th>Total</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
-
-                    <br>
-                    <button type="button" id="downloadExcelBtn">Descargar Excel</button>
+                    <button type="button" id="downloadExcelBtn">Descargar CSV</button>
                 </form>
             </div>
         </div>
@@ -316,8 +306,8 @@
         /* ----------------------------
            CONFIG
            ---------------------------- */
-        const N8N_WEBHOOK_URL = "https://n8n.neo-n8n.com/webhook/google-doc-ai"; // remoto
-        const N8N_LOCAL = "http://localhost:5678/webhook-test/google-doc-ai"; // local dev
+        const N8N_WEBHOOK_URL = "https://n8n.neo-n8n.com/webhook/google-doc-ai";
+        const N8N_LOCAL = "http://localhost:5678/webhook-test/google-doc-ai";
 
         /* ----------------------------
            DOM refs + estado
@@ -333,17 +323,21 @@
 
         const overlayContainer = document.getElementById('overlayContainer');
         const resultInfo = document.getElementById('resultInfo');
-        const lineItemsTbody = document.querySelector('#lineItemsTable tbody');
+        //const lineItemsTbody = document.querySelector('#lineItemsTabletbody');
         const resultsContainer = document.getElementById('resultsContainer');
         const prevBtn = document.getElementById('prevResultBtn');
         const nextBtn = document.getElementById('nextResultBtn');
+        const contBtn = document.getElementById('contBtn')
+        const contSearchClave = document.getElementById('contSearchClave')
+        const contSearchValor = document.getElementById('contSearchValor')
+        const contFijoBtn = document.getElementById('contFijoBtn')
 
         const ocrPreview = {
             _objectURL: null,
             src: ocrImage
         };
 
-        const PDF_RENDER_SCALE = 3;
+        const PDF_RENDER_SCALE = 2;
 
         let fileGen = null;
         let listaDocumentos = [];
@@ -351,9 +345,80 @@
         let processingQueue = [];
         let processingResults = [];
         let currentIndex = 0;
+        let listaContenidoBuscar = [];
 
-        /* mapping simple para inputs */
         const fieldMap = { invoice_id: 'invoiceNumber', invoice_date: 'invoiceDate', supplier_tax_id: 'supplierNIF', total_amount: 'total', total: 'total' };
+
+        function addSearchField(clave, valor) {
+            // Evitar duplicados si es necesario, o simplemente añadir
+            listaContenidoBuscar.push({ clave: clave, valor: valor });
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.id = `input_extra_${clave}`;
+            input.name = clave;
+
+            const label = document.createElement('label');
+            label.innerText = clave;
+            label.style = "color: #374151; font-size: 14px; font-weight: 600; margin-top: 8px;";
+
+            confirmForm.appendChild(label);
+            confirmForm.appendChild(input);
+        }
+
+        contBtn.addEventListener('click', () => {
+            let clave = contSearchClave.value
+            let valor = contSearchValor.value
+
+            if (clave == '' || valor == '') {
+                Swal.fire("Aviso", "Por favor rellene los campos clave y valor", "warning");
+            } else {
+                addSearchField(clave, valor);
+                contSearchClave.value = '';
+                contSearchValor.value = '';
+            }
+        })
+
+        contFijoBtn.addEventListener('click', async () => {
+            const { value: config } = await Swal.fire({
+                title: 'Seleccione Configuración',
+                input: 'select',
+                inputOptions: {
+                    'factura': 'Factura Estándar',
+                    'contrato': 'Contrato de Trabajo'
+                },
+                inputPlaceholder: 'Seleccione una opción',
+                showCancelButton: true,
+                confirmButtonText: 'Aplicar',
+                cancelButtonText: 'Cancelar'
+            });
+
+            if (config) {
+                //confirmForm.innerHTML = '<button type="button" id="downloadExcelBtn">Descargar CSV</button>';
+                listaContenidoBuscar = [];
+
+                if (config === 'factura') {
+                    addSearchField('id_factura', 'Número o código identificativo de la factura');
+                    addSearchField('base_imponible', 'Importe total antes de aplicar impuestos');
+                    addSearchField('iban_pago', 'Código IBAN de la cuenta donde realizar el pago');
+                    addSearchField('proveedor_nombre', 'Nombre legal o razón social de la empresa que emite la factura');
+                    addSearchField('nif', 'Identificador unico de una empresa');
+                    addSearchField('fecha', 'Fecha de la factura');
+                    addSearchField('total', 'Total de la factura');
+                } else if (config === 'contrato') {
+                    addSearchField('nombre', 'Nombre y apellidos del trabajador');
+                    addSearchField('dni', 'DNI del trabajador');
+                    addSearchField('empresa', 'Nombre de la empresa');
+                    addSearchField('remuneracion', 'Remuneración');
+                    addSearchField('puesto_trabajo', 'Cargo o categoría profesional del trabajador');
+                    addSearchField('num_ss', 'Número de la Seguridad Social del trabajador');
+                    addSearchField('fecha_inicio', 'Fecha de inicio del contrato');
+                    addSearchField('fecha_fin', 'Fecha de fin del contrato');
+                }
+
+                Swal.fire("Éxito", "Configuración aplicada correctamente", "success");
+            }
+        })
 
         async function pdfToImage(file, pageIndex = 0) {
             const arrayBuffer = await file.arrayBuffer();
@@ -506,6 +571,7 @@
            UI: selección de archivo + miniaturas PDF (manteniendo comportamiento anterior)
            ---------------------------- */
         fileInput.addEventListener('change', async (e) => {
+            listaContenidoBuscar = [];
             const files = Array.from(e.target.files);
             fileGen = null;
             listaDocumentos = [];
@@ -532,45 +598,36 @@
                 return;
             }
 
-            if (pdfFiles.length > 1) {
-                Swal.fire("Aviso", "Solo puedes subir un PDF a la vez.", "warning");
+            // Validar tamaño total (20 MB)
+            const totalSize = files.reduce((acc, f) => acc + f.size, 0);
+            if (totalSize > 20 * 1024 * 1024) {
+                Swal.fire("Aviso", "El total de los archivos supera el límite de 20 MB.", "warning");
                 fileInput.value = "";
                 fileName.textContent = 'Ningún archivo seleccionado';
                 processBtn.disabled = true;
                 return;
             }
 
-            if (pdfFiles.length === 1) {
-                fileGen = pdfFiles[0];
-
-                // Validar tamaño máximo 20 MB
-                if (fileGen.size > 20 * 1024 * 1024) {
-                    Swal.fire("Aviso", "El PDF supera el tamaño máximo de 20 MB.", "warning");
-                    fileInput.value = "";
-                    fileName.textContent = 'Ningún archivo seleccionado';
-                    processBtn.disabled = true;
-                    return;
-                }
-
-                fileName.textContent = fileGen.name;
+            if (pdfFiles.length > 0) {
+                fileGen = pdfFiles; // Ahora es un array de PDFs
+                fileName.textContent = pdfFiles.length === 1 ? pdfFiles[0].name : `${pdfFiles.length} PDFs seleccionados`;
                 processBtn.disabled = false;
-                await selecionaPaginasPdf(fileGen);
+                await selecionaPaginasPdf(pdfFiles);
                 return;
             }
 
             if (imageFiles.length > 0) {
-                let type = "image";
                 fileGen = imageFiles; // array de imágenes
-                fileName.textContent = imageFiles.map(f => f.name).join(", ");
+                fileName.textContent = imageFiles.length === 1 ? imageFiles[0].name : `${imageFiles.length} imágenes seleccionadas`;
                 processBtn.disabled = false;
                 return;
             }
         });
 
         /* función para seleccionar páginas del pdf (modal con miniaturas) */
-        async function selecionaPaginasPdf(filePdf) {
+        async function selecionaPaginasPdf(filesPdf) {
             Swal.fire({
-                title: "Abriendo PDF",
+                title: "Abriendo PDFs",
                 text: "Generando miniaturas...",
                 allowOutsideClick: false,
                 allowEscapeKey: false,
@@ -578,95 +635,152 @@
             });
 
             try {
-                const arrayBuffer = await filePdf.arrayBuffer();
-                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-
                 const container = document.createElement("div");
-                container.style.display = "flex";
-                container.style.flexWrap = "wrap";
-                container.style.gap = "10px";
-                container.style.maxHeight = "420px";
+                container.style.maxHeight = "500px";
                 container.style.overflow = "auto";
+                container.style.padding = "10px";
 
-                for (let i = 1; i <= pdf.numPages; i++) {
-                    const page = await pdf.getPage(i);
-                    const viewport = page.getViewport({ scale: 0.2 });
-                    const canvas = document.createElement("canvas");
-                    canvas.width = viewport.width;
-                    canvas.height = viewport.height;
-                    await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+                let totalPagesSelected = 0;
+                const updateCounter = () => {
+                    const counter = document.getElementById('pageCounter');
+                    if (counter) counter.innerText = `Páginas seleccionadas: ${totalPagesSelected} / 15`;
+                };
 
-                    const checkbox = document.createElement("input");
-                    checkbox.type = "checkbox";
-                    checkbox.value = i;
-                    checkbox.style.display = "none";
+                for (let fIdx = 0; fIdx < filesPdf.length; fIdx++) {
+                    const file = filesPdf[fIdx];
+                    const arrayBuffer = await file.arrayBuffer();
+                    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
-                    const wrapper = document.createElement("div");
-                    wrapper.style.border = "2px solid #ccc";
-                    wrapper.style.padding = "6px";
-                    wrapper.style.cursor = "pointer";
-                    wrapper.style.borderRadius = "6px";
-                    wrapper.style.display = "flex";
-                    wrapper.style.flexDirection = "column";
-                    wrapper.style.alignItems = "center";
-                    wrapper.style.background = "#fff";
+                    const fileSection = document.createElement("div");
+                    fileSection.style.marginBottom = "30px";
+                    fileSection.style.padding = "15px";
+                    fileSection.style.background = "#fff";
+                    fileSection.style.borderRadius = "8px";
+                    fileSection.style.border = "1px solid #E5E7EB";
 
-                    const label = document.createElement("div");
-                    label.style.marginTop = "6px";
-                    label.style.fontSize = "12px";
-                    label.style.color = "#333";
-                    label.innerText = `Página ${i}`;
+                    fileSection.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #F3F4F6; padding-bottom: 8px;">
+                            <h4 style="margin: 0; color: #111827; font-size: 16px;">${file.name}</h4>
+                            <div style="display: flex; gap: 15px; background: #F9FAFB; padding: 5px 12px; border-radius: 6px; border: 1px solid #E5E7EB;">
+                                <label style="font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 5px; color: #374151;">
+                                    <input type="radio" name="pdfMode_${fIdx}" value="together" checked style="cursor: pointer;"> Juntar
+                                </label>
+                                <label style="font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 5px; color: #374151;">
+                                    <input type="radio" name="pdfMode_${fIdx}" value="separate" style="cursor: pointer;"> Separar
+                                </label>
+                            </div>
+                        </div>
+                    `;
 
-                    wrapper.appendChild(canvas);
-                    wrapper.appendChild(label);
-                    wrapper.appendChild(checkbox);
+                    const thumbsContainer = document.createElement("div");
+                    thumbsContainer.style.display = "flex";
+                    thumbsContainer.style.flexWrap = "wrap";
+                    thumbsContainer.style.gap = "10px";
 
-                    wrapper.addEventListener("click", () => {
-                        checkbox.checked = !checkbox.checked;
-                        wrapper.style.border = checkbox.checked ? "2px solid #007bff" : "2px solid #ccc";
-                        wrapper.style.background = checkbox.checked ? "#e7f1ff" : "#fff";
-                    });
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const viewport = page.getViewport({ scale: 0.2 });
+                        const canvas = document.createElement("canvas");
+                        canvas.width = viewport.width;
+                        canvas.height = viewport.height;
+                        await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
 
-                    container.appendChild(wrapper);
+                        const checkbox = document.createElement("input");
+                        checkbox.type = "checkbox";
+                        checkbox.dataset.fileIdx = fIdx;
+                        checkbox.dataset.pageIdx = i - 1;
+                        checkbox.style.display = "none";
+
+                        const wrapper = document.createElement("div");
+                        wrapper.className = "pdf-thumb-wrapper";
+                        wrapper.style.border = "2px solid #ccc";
+                        wrapper.style.padding = "6px";
+                        wrapper.style.cursor = "pointer";
+                        wrapper.style.borderRadius = "6px";
+                        wrapper.style.display = "flex";
+                        wrapper.style.flexDirection = "column";
+                        wrapper.style.alignItems = "center";
+                        wrapper.style.background = "#fff";
+
+                        const label = document.createElement("div");
+                        label.style.marginTop = "6px";
+                        label.style.fontSize = "12px";
+                        label.style.color = "#333";
+                        label.innerText = `Página ${i}`;
+
+                        wrapper.appendChild(canvas);
+                        wrapper.appendChild(label);
+                        wrapper.appendChild(checkbox);
+
+                        wrapper.addEventListener("click", () => {
+                            if (!checkbox.checked && totalPagesSelected >= 15) {
+                                Swal.showValidationMessage("Límite máximo de 15 páginas alcanzado.");
+                                setTimeout(() => Swal.resetValidationMessage(), 2000);
+                                return;
+                            }
+                            checkbox.checked = !checkbox.checked;
+                            totalPagesSelected += checkbox.checked ? 1 : -1;
+                            wrapper.style.border = checkbox.checked ? "2px solid #007bff" : "2px solid #ccc";
+                            wrapper.style.background = checkbox.checked ? "#e7f1ff" : "#fff";
+                            updateCounter();
+                        });
+
+                        thumbsContainer.appendChild(wrapper);
+                    }
+                    fileSection.appendChild(thumbsContainer);
+                    container.appendChild(fileSection);
                 }
 
-                const modeContainer = document.createElement("div");
-                modeContainer.style.marginTop = "12px";
-                modeContainer.innerHTML = `
-                                    <label style="margin-right:10px;">
-                                        <input type="radio" name="pdfMode" value="together" checked> Ejecutar páginas juntas
-                                    </label>
-                                    <label>
-                                        <input type="radio" name="pdfMode" value="separate"> Ejecutar páginas por separado
-                                    </label>
-                                `;
+                const infoFooter = document.createElement("div");
+                infoFooter.style.marginTop = "15px";
+                infoFooter.style.padding = "10px";
+                infoFooter.style.background = "#EFF6FF";
+                infoFooter.style.borderRadius = "8px";
+                infoFooter.style.border = "1px solid #DBEAFE";
+                infoFooter.style.display = "flex";
+                infoFooter.style.justifyContent = "center";
+                infoFooter.style.alignItems = "center";
+                infoFooter.innerHTML = `<div id="pageCounter" style="font-weight: 600; color: #2563EB; font-size: 14px;">Páginas seleccionadas: 0 / 15</div>`;
 
                 const { value: result } = await Swal.fire({
-                    title: "Selecciona páginas y modo de ejecución",
+                    title: "Selecciona páginas y modo por PDF",
                     html: "<div id='swalPlaceholder'></div>",
-                    width: "85%",
+                    width: "90%",
                     showCancelButton: true,
                     allowOutsideClick: false,
                     allowEscapeKey: false,
-                    confirmButtonText: "Aceptar",
+                    confirmButtonText: "Confirmar Selección",
                     didOpen: () => {
-                        const htmlContainer = Swal.getHtmlContainer();
-                        const placeholder = htmlContainer.querySelector('#swalPlaceholder');
+                        const placeholder = Swal.getHtmlContainer().querySelector('#swalPlaceholder');
                         placeholder.appendChild(container);
-                        placeholder.appendChild(modeContainer);
+                        placeholder.appendChild(infoFooter);
                     },
                     preConfirm: () => {
-                        const checked = container.querySelectorAll("input:checked");
-                        if (checked.length === 0) { Swal.showValidationMessage("Selecciona al menos una página"); return false; }
-                        const pages = Array.from(checked).map(cb => parseInt(cb.value));
-                        const mode = modeContainer.querySelector('input[name="pdfMode"]:checked').value;
-                        return { pages, mode };
+                        const checked = container.querySelectorAll("input[type='checkbox']:checked");
+                        if (checked.length === 0) {
+                            Swal.showValidationMessage("Selecciona al menos una página");
+                            return false;
+                        }
+                        const selections = Array.from(checked).map(cb => {
+                            const fIdx = parseInt(cb.dataset.fileIdx);
+                            const mode = document.querySelector(`input[name="pdfMode_${fIdx}"]:checked`).value;
+                            return {
+                                fileIdx: fIdx,
+                                pageIdx: parseInt(cb.dataset.pageIdx),
+                                mode: mode
+                            };
+                        });
+                        return selections;
                     }
                 });
 
                 if (result) {
-                    listaDocumentos = result.pages.map(p => p - 1);
-                    pdfRunTogether = result.mode === "together";
+                    listaDocumentos = result;
+                } else {
+                    // Si cancela, limpiamos para no permitir procesar una selección vacía
+                    fileGen = null;
+                    fileName.textContent = 'Ningún archivo seleccionado';
+                    processBtn.disabled = true;
                 }
 
             } catch (err) {
@@ -682,86 +796,113 @@
            PROCESS: preparar cola y enviar a n8n
            ---------------------------- */
         processBtn.addEventListener('click', async () => {
+            if (!listaContenidoBuscar.length) {
+                Swal.fire("Aviso", "No has selecionado ningun", "warning");
+                return;
+            }
+
             fileInput.value = '';
             if (!fileGen) return;
             processingQueue = [];
             processingResults = [];
 
-            // Construir cola: varias imágenes o PDF(páginas o conjunto)
-            if (Array.isArray(fileGen)) {
-                fileGen.forEach(imgFile => processingQueue.push({ blob: imgFile, name: imgFile.name, sourceType: "image", meta: { originalName: imgFile.name } }));
-            } else if (fileGen.type === "application/pdf") {
-                if (!listaDocumentos.length) {
-                    Swal.fire("Aviso", "No has seleccionado páginas para el PDF.", "warning");
-                    return;
-                }
-                try {
+            try {
+                // Si son PDFs seleccionados
+                if (Array.isArray(fileGen) && fileGen[0].type === "application/pdf") {
+                    if (!listaDocumentos.length) {
+                        Swal.fire("Aviso", "No has seleccionado páginas.", "warning");
+                        return;
+                    }
 
-                    if (pdfRunTogether) {
-                        const arrayBuffer = await fileGen.arrayBuffer();
+                    // Agrupamos por archivo para no abrir el mismo PDF varias veces
+                    const grouped = listaDocumentos.reduce((acc, sel) => {
+                        if (!acc[sel.fileIdx]) acc[sel.fileIdx] = { pages: [], mode: sel.mode };
+                        acc[sel.fileIdx].pages.push(sel.pageIdx);
+                        return acc;
+                    }, {});
+
+                    for (const fIdx in grouped) {
+                        const file = fileGen[fIdx];
+                        const { pages, mode } = grouped[fIdx];
+                        const arrayBuffer = await file.arrayBuffer();
                         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
-                        const canvas = document.createElement("canvas");
-                        const ctx = canvas.getContext("2d");
+                        if (mode === "together") {
+                            const canvas = document.createElement("canvas");
+                            const ctx = canvas.getContext("2d");
+                            let maxWidth = 0;
+                            let totalHeight = 0;
+                            const pagesImages = [];
 
-                        let maxWidth = 0;
-                        let totalHeight = 0;
-                        const pagesImages = [];
+                            for (const pIdx of pages) {
+                                const page = await pdf.getPage(pIdx + 1);
+                                const viewport = page.getViewport({ scale: PDF_RENDER_SCALE });
+                                const pageCanvas = document.createElement("canvas");
+                                pageCanvas.width = viewport.width;
+                                pageCanvas.height = viewport.height;
+                                await page.render({ canvasContext: pageCanvas.getContext("2d"), viewport }).promise;
+                                pagesImages.push(pageCanvas);
+                                maxWidth = Math.max(maxWidth, viewport.width);
+                                totalHeight += viewport.height;
+                            }
 
-                        // Renderizar páginas seleccionadas
-                        for (const pageIndex of listaDocumentos) {
-                            const page = await pdf.getPage(pageIndex + 1);
-                            const viewport = page.getViewport({ scale: PDF_RENDER_SCALE });
-                            const pageCanvas = document.createElement("canvas");
-                            pageCanvas.width = viewport.width;
-                            pageCanvas.height = viewport.height;
-                            await page.render({ canvasContext: pageCanvas.getContext("2d"), viewport }).promise;
+                            canvas.width = maxWidth;
+                            canvas.height = totalHeight;
+                            let offsetY = 0;
+                            for (const pc of pagesImages) {
+                                ctx.drawImage(pc, 0, offsetY);
+                                offsetY += pc.height;
+                            }
 
-                            pagesImages.push(pageCanvas);
-                            maxWidth = Math.max(maxWidth, viewport.width);
-                            totalHeight += viewport.height;
-                        }
-
-                        // Combinar horizontalmente
-                        canvas.width = maxWidth;
-                        canvas.height = totalHeight;
-                        let offsetY = 0;
-                        pagesImages.forEach(pc => {
-                            ctx.drawImage(pc, 0, offsetY);
-                            offsetY += pc.height;
-                        });
-
-                        const imgBlob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
-                        processingQueue.push({
-                            blob: imgBlob,
-                            name: fileGen.name.replace(/\.pdf$/i, '') + "_seleccion.png",
-                            sourceType: "image",
-                            meta: { originalName: fileGen.name }
-                        });
-                    } else {
-                        for (const pageIndex of listaDocumentos) {
-                            const img = await pdfToImage(fileGen, pageIndex);
-                            const imgBlob = await fetch(img.src).then(r => r.blob());
+                            const imgBlob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.8));
+                            console.log(`Documento preparado: ${file.name}, Tamaño: ${(imgBlob.size / 1024 / 1024).toFixed(2)} MB`);
                             processingQueue.push({
                                 blob: imgBlob,
-                                name: fileGen.name.replace(/\.pdf$/i, '') + `_p${pageIndex + 1}.png`,
+                                name: file.name.replace(/\.pdf$/i, '') + "_seleccion.jpg",
                                 sourceType: "image",
-                                meta: { originalName: fileGen.name, pageIndex }
+                                meta: { originalName: file.name }
                             });
+                        } else {
+                            // Por separado
+                            for (const pIdx of pages) {
+                                const page = await pdf.getPage(pIdx + 1);
+                                const viewport = page.getViewport({ scale: PDF_RENDER_SCALE });
+                                const canvas = document.createElement("canvas");
+                                const ctx = canvas.getContext("2d");
+                                canvas.width = viewport.width;
+                                canvas.height = viewport.height;
+                                await page.render({ canvasContext: ctx, viewport }).promise;
+
+                                const imgBlob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.8));
+                                console.log(`Página preparada: ${file.name} p${pIdx + 1}, Tamaño: ${(imgBlob.size / 1024 / 1024).toFixed(2)} MB`);
+                                processingQueue.push({
+                                    blob: imgBlob,
+                                    name: file.name.replace(/\.pdf$/i, '') + `_p${pIdx + 1}.jpg`,
+                                    sourceType: "image",
+                                    meta: { originalName: file.name, pageIndex: pIdx }
+                                });
+                            }
                         }
                     }
-                } catch (err) {
-                    console.error("Error creando PDFs o imagenes:", err);
-                    Swal.fire("Error", "No se pudo preparar el PDF.", "error");
-                    return;
+                } else if (Array.isArray(fileGen)) {
+                    // Caso de imágenes
+                    fileGen.forEach(imgFile => {
+                        processingQueue.push({
+                            blob: imgFile,
+                            name: imgFile.name,
+                            sourceType: "image",
+                            meta: { originalName: imgFile.name }
+                        });
+                    });
                 }
-            } else {
-                Swal.fire("Tipo no soportado", "Solo PDFs e imágenes son soportados.", "warning");
+            } catch (err) {
+                console.error("Error preparando documentos:", err);
+                Swal.fire("Error", "No se pudieron preparar los documentos.", "error");
                 return;
             }
 
             if (!processingQueue.length) {
-                Swal.fire("Nada que procesar", "No hay documentos en la cola.", "info");
+                Swal.fire("Nada que procesar", "No hay documentos seleccionados.", "info");
                 return;
             }
 
@@ -790,6 +931,10 @@
                 formData.append('originalName', item.meta.originalName || '');
                 formData.append('pageIndex', (item.meta.pageIndex ?? ''));
 
+                const searchStrings = listaContenidoBuscar.map(i => `"${i.clave}":"${i.valor}"`);
+                formData.append('listaContenidoBuscar', searchStrings);
+
+                console.log(listaContenidoBuscar)
                 try {
                     let res;
 
@@ -888,7 +1033,7 @@
             const scaleX = rect.width / naturalW;
             const scaleY = rect.height / naturalH;
 
-            const ocrFields = extractOcrFieldsFromAgent(invoice, naturalW, naturalH, ['FORM_FIELD', 'PARAGRAPH']) || [];
+            const ocrFields = extractOcrFieldsFromAgent(invoice, naturalW, naturalH, ['FORM_FIELD']) || [];
 
             ocrFields.forEach(f => {
                 if (!f.bbox) return;
@@ -922,7 +1067,7 @@
 
         async function renderIndex(i) {
             confirmForm.classList.add('hidden');
-            lineItemsTbody.innerHTML = '';
+            //lineItemsTbody.innerHTML = '';
             overlayContainer.innerHTML = '';
 
             if (!processingResults || !processingResults.length) return;
@@ -963,64 +1108,54 @@
 
             drawOverlays(invoice, targetEl);
 
-            // Rellenar inputs
-            ['invoice_id', 'invoice_date', 'supplier_tax_id', 'supplier_name', 'total_amount', 'total'].forEach(k => {
-                let val = invoice[k] ?? (invoice.fields?.[k]) ?? '';
-                if (!val && Array.isArray(invoice.ocr_fields)) {
-                    const f = invoice.ocr_fields.find(x => (x.key || x.name) === k);
-                    val = f ? f.value || f.text || '' : '';
-                }
-                if (val) setInputValueForKey(k, String(val));
-            });
 
-            // Rellenar line items
-            const items = (invoice && (invoice.line_items || invoice.items)) ? (invoice.line_items || invoice.items) : [];
-            if (Array.isArray(items) && items.length) {
-                items.forEach(item => {
-                    const tr = document.createElement('tr');
-                    const desc = item.description || item.desc || item.name || '';
-                    const qty = item.quantity || item.qty || '';
-                    const unit = item.unit_price || item.unitPrice || item.price || '';
-                    const total = item.amount || item.total || item.line_total || '';
-                    [desc, qty, unit, total].forEach(v => {
-                        const td = document.createElement('td');
-                        const input = document.createElement('input');
-                        input.value = v;
-                        td.appendChild(input);
-                        tr.appendChild(td);
-                    });
-                    lineItemsTbody.appendChild(tr);
+            if (invoice.buscarCampos && invoice.buscarCampos.length > 0) {
+                listaContenidoBuscar.forEach(item => {
+                    let val = invoice.buscarCampos[0][item.clave] ?? '';
+                    //console.log(`Buscando ${item.clave}:`, val);
+
+                    const inputExtra = document.getElementById(`input_extra_${item.clave}`);
+                    if (inputExtra) {
+                        inputExtra.value = val;
+                    }
                 });
-            } else {
-                const tr = document.createElement('tr');
-                const td = document.createElement('td');
-                td.colSpan = 4;
-                td.innerText = 'Sin line items';
-                tr.appendChild(td);
-                lineItemsTbody.appendChild(tr);
             }
-
             confirmForm.classList.remove('hidden');
         }
 
-        /* prev/next handlers */
+        /* Botones para cambiar de documento */
         prevBtn.onclick = () => { if (currentIndex > 0) { currentIndex--; renderIndex(currentIndex); } };
         nextBtn.onclick = () => { if (currentIndex < processingResults.length - 1) { currentIndex++; renderIndex(currentIndex); } };
 
-        /* descarga excel */
+        /* Descargar CSV */
         document.getElementById('downloadExcelBtn').addEventListener('click', () => {
-            const wb = XLSX.utils.book_new();
-            const ws_data = [];
-            const header = ['Descripción', 'Cantidad', 'Precio Unitario', 'Total'];
-            ws_data.push(header);
-            document.querySelectorAll('#lineItemsTable tbody tr').forEach(tr => {
-                const row = [];
-                tr.querySelectorAll('input').forEach(inp => row.push(inp.value));
-                ws_data.push(row);
+            if (!processingResults.length) {
+                Swal.fire("Aviso", "No hay datos para descargar", "warning");
+                return;
+            }
+
+            const headers = listaContenidoBuscar.map(i => i.clave);
+            const csvData = [headers];
+
+            processingResults.forEach(r => {
+                let invoice = r.response;
+                if (Array.isArray(invoice)) invoice = invoice[0];
+
+                const row = headers.map(h => {
+                    // Accedemos a los campos buscados en la respuesta de cada documento
+                    return (invoice.buscarCampos && invoice.buscarCampos[0])
+                        ? (invoice.buscarCampos[0][h] ?? '')
+                        : '';
+                });
+                csvData.push(row);
             });
-            const ws = XLSX.utils.aoa_to_sheet(ws_data);
-            XLSX.utils.book_append_sheet(wb, ws, 'LineItems');
-            XLSX.writeFile(wb, 'factura.xlsx');
+
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(csvData);
+            XLSX.utils.book_append_sheet(wb, ws, 'Resultados');
+
+            // Forzamos la descarga como CSV usando SheetJS
+            XLSX.writeFile(wb, 'facturas_procesadas.csv', { bookType: 'csv', FS: ';' });
         });
 
         const documentWrapper = document.getElementById('documentWrapper');
