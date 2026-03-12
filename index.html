@@ -5,244 +5,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Demo · Confirmación de Factura</title>
-    <style>
-        /* --- CSS BASE --- */
-        * {
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f5f7fb;
-            margin: 0;
-            padding: 0;
-            color: #1f2937;
-        }
-
-        .container {
-            max-width: 1100px;
-            margin: 30px auto;
-            padding: 20px;
-        }
-
-        h1 {
-            text-align: center;
-            margin-bottom: 16px;
-        }
-
-        .upload-card,
-        .search-card,
-        .result,
-        #confirmForm {
-            background: #fff;
-            border-radius: 14px;
-            padding: 24px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
-            margin-bottom: 24px;
-        }
-
-        .upload-button,
-        button {
-            display: inline-block;
-            background: #2563eb;
-            color: #fff;
-            padding: 12px 20px;
-            border-radius: 10px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: 0.2s;
-            border: none;
-        }
-
-        .upload-button:hover,
-        button:hover {
-            background: #1e40af;
-        }
-
-        button:disabled {
-            background: #9ca3af;
-            cursor: not-allowed;
-        }
-
-        .file-name {
-            margin: 12px 0;
-            font-size: 14px;
-            color: #6b7280;
-        }
-
-        #confirmForm {
-            display: grid;
-            gap: 12px;
-        }
-
-        #confirmForm .form-group {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 12px;
-        }
-
-        #confirmForm label {
-            display: flex;
-            flex-direction: column;
-            font-size: 14px;
-            color: #374151;
-        }
-
-        #confirmForm input {
-            padding: 6px 8px;
-            font-size: 14px;
-            border: 1px solid #d1d5db;
-            border-radius: 6px;
-            width: 100%;
-        }
-
-        #lineItemsTable {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 12px;
-            table-layout: fixed;
-        }
-
-        #lineItemsTable th,
-        #lineItemsTable td {
-            padding: 8px 6px;
-            border: 1px solid #e6e6e6;
-            text-align: left;
-            font-size: 13px;
-        }
-
-        #lineItemsTable input {
-            width: 100%;
-            padding: 4px 6px;
-            font-size: 13px;
-            border-radius: 4px;
-        }
-
-        @media (max-width: 1024px) {
-            .container {
-                padding: 10px;
-            }
-
-            #lineItemsTable {
-                display: block;
-                overflow-x: auto;
-            }
-        }
-
-        #loader {
-            display: none;
-            text-align: center;
-            margin: 24px 0;
-        }
-
-        .spinner {
-            border: 6px solid #f3f3f3;
-            border-top: 6px solid #2563eb;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto;
-        }
-
-        @keyframes spin {
-            100% {
-                transform: rotate(360deg);
-            }
-        }
-
-        /* results layout */
-        #resultsContainer {
-            display: flex;
-            gap: 24px;
-            align-items: flex-start;
-            margin-top: 20px;
-        }
-
-        #documentSide {
-            flex: 1;
-            min-width: 420px;
-            position: relative;
-        }
-
-        #documentWrapper {
-            position: relative;
-            display: inline-block;
-        }
-
-        #documentSide img {
-            width: 100%;
-            height: auto;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            display: block;
-        }
-
-        #overlayContainer {
-            position: absolute;
-            top: 0;
-            left: 0;
-            overflow: hidden;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-        }
-
-        #formSide {
-            width: 420px;
-        }
-
-        #ocrImage {
-            display: block;
-            width: auto;
-            /* o width: 100%; si quieres escalar al contenedor */
-            max-width: none;
-        }
-
-        .ocr-box {
-            position: absolute;
-            border: 2px solid rgba(0, 123, 255, 0.9);
-            background: rgba(0, 123, 255, 0.12);
-            color: #003366;
-            font-size: 12px;
-            overflow: hidden;
-            white-space: nowrap;
-            text-overflow: ellipsis;
-            padding: 2px;
-            cursor: pointer;
-            pointer-events: auto;
-            box-sizing: border-box;
-        }
-
-        .ocr-chip {
-            padding: 6px 8px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            background: #fff;
-            cursor: grab;
-            margin: 4px;
-            display: inline-block;
-        }
-
-        .ocr-chip-container {
-            max-width: 100%;
-            overflow-x: auto;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-        }
-
-        .hidden {
-            display: none;
-        }
-
-        .footer-note {
-            text-align: center;
-            font-size: 12px;
-            color: #9ca3af;
-            margin-top: 12px;
-        }
-    </style>
+    <link rel="stylesheet" href="styles.css">
 </head>
 
 <body>
@@ -251,9 +14,9 @@
             <div class="upload-card">
                 <input type="file" id="fileInput" accept=".pdf,image/*" multiple hidden>
                 <p>Máximo 15 páginas, 20 MB como máximo</p>
-                <label for="fileInput" class="upload-button">📄 Subir factura</label>
+                <label for="fileInput" class="upload-button">📄 Subir documento</label>
                 <p id="fileName" class="file-name">Ningún archivo seleccionado</p>
-                <button id="processBtn" disabled>Procesar factura</button>
+                <button id="processBtn" disabled>Procesar documento</button>
             </div>
             <div class="search-card">
                 <p>Contenido a buscar</p>
@@ -337,7 +100,7 @@
             src: ocrImage
         };
 
-        const PDF_RENDER_SCALE = 2;
+        const PDF_RENDER_SCALE = 1.0;
 
         let fileGen = null;
         let listaDocumentos = [];
@@ -936,15 +699,25 @@
                 console.log(listaContenidoBuscar)
                 try {
                     let res;
+                    const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+                    const targetWebhook = isLocal ? N8N_LOCAL : N8N_WEBHOOK_URL;
 
-                    /*try {
-                        res = await fetch(N8N_LOCAL, { method: "POST", body: formData });
+                    console.log(`Enviando a: ${targetWebhook}`);
+
+                    try {
+                        res = await fetch(targetWebhook, { method: "POST", body: formData });
                     } catch (e) {
-                        console.warn("Local webhook falló, usando remoto...");
-                    }*/
+                        console.error("Fallo de red o CORS:", e);
+                        const msg = isLocal 
+                            ? "No se pudo contactar con n8n LOCAL. ¿Está Docker encendido?" 
+                            : "No se pudo contactar con el n8n remoto (CORS o Red).";
+                        throw new Error(msg);
+                    }
 
-                    if (!res || !res.ok) {
-                        res = await fetch(N8N_WEBHOOK_URL, { method: "POST", body: formData });
+                    if (!res.ok) {
+                        if (res.status === 504) throw new Error("Tiempo de espera agotado (504). n8n no respondió a tiempo.");
+                        const errorText = await res.text();
+                        throw new Error(`Error del servidor (${res.status}): ${errorText}`);
                     }
 
                     const text = await res.text();
@@ -1037,7 +810,7 @@
             const scaleX = rect.width / naturalW;
             const scaleY = rect.height / naturalH;
 
-            const ocrFields = extractOcrFieldsFromAgent(invoice, naturalW, naturalH, ['FORM_FIELD']) || [];
+            const ocrFields = extractOcrFieldsFromAgent(invoice, naturalW, naturalH, "PARAGRAPH") || [];
 
             ocrFields.forEach(f => {
                 if (!f.bbox) return;
