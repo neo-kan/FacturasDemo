@@ -394,7 +394,7 @@
             });
 
             if (config) {
-                //confirmForm.innerHTML = '<button type="button" id="downloadExcelBtn">Descargar CSV</button>';
+                confirmForm.innerHTML = '<button type="button" id="downloadExcelBtn">Descargar CSV</button>';
                 listaContenidoBuscar = [];
 
                 if (config === 'factura') {
@@ -571,7 +571,6 @@
            UI: selección de archivo + miniaturas PDF (manteniendo comportamiento anterior)
            ---------------------------- */
         fileInput.addEventListener('change', async (e) => {
-            listaContenidoBuscar = [];
             const files = Array.from(e.target.files);
             fileGen = null;
             listaDocumentos = [];
@@ -797,7 +796,7 @@
            ---------------------------- */
         processBtn.addEventListener('click', async () => {
             if (!listaContenidoBuscar.length) {
-                Swal.fire("Aviso", "No has selecionado ningun", "warning");
+                Swal.fire("Aviso", "No has añadido ningun contenido a buscar", "warning");
                 return;
             }
 
@@ -938,11 +937,11 @@
                 try {
                     let res;
 
-                    try {
+                    /*try {
                         res = await fetch(N8N_LOCAL, { method: "POST", body: formData });
                     } catch (e) {
                         console.warn("Local webhook falló, usando remoto...");
-                    }
+                    }*/
 
                     if (!res || !res.ok) {
                         res = await fetch(N8N_WEBHOOK_URL, { method: "POST", body: formData });
@@ -965,6 +964,11 @@
                     });
 
                     if (progressDetail) progressDetail.innerText = `Procesado: ${item.name}`;
+
+                    // Añadimos un pequeño retardo de 800ms antes del siguiente para no saturar
+                    if (i < processingQueue.length - 1) {
+                        await new Promise(resolve => setTimeout(resolve, 800));
+                    }
 
                 } catch (err) {
 
@@ -1080,6 +1084,10 @@
             currentIndex = i;
             resultInfo.innerText = `${i + 1} / ${processingResults.length} — ${r.name || 'Sin nombre'}`;
 
+            console.log("Renderizando resultado", i, r.name);
+            console.log("listaContenidoBuscar actual:", listaContenidoBuscar);
+            console.log("Respuesta recibida:", r.response);
+
             await loadPreview(r.blob);
             await new Promise(resolve => requestAnimationFrame(resolve));
 
@@ -1119,6 +1127,18 @@
                         inputExtra.value = val;
                     }
                 });
+            }
+
+            // Limpiar avisos de servidor previos
+            const oldErrors = confirmForm.querySelectorAll('.server-error-msg');
+            oldErrors.forEach(e => e.remove());
+
+            // Mostrar error del servidor si existe
+            if (invoice.error_message) {
+                const errorDiv = document.createElement('div');
+                errorDiv.className = "server-error-msg bg-orange-100 border-l-4 border-orange-500 text-orange-700 p-4 mb-4 text-xs";
+                errorDiv.innerHTML = `<p class="font-bold">Aviso del Servidor:</p><p>${invoice.error_message}</p>`;
+                confirmForm.prepend(errorDiv);
             }
             confirmForm.classList.remove('hidden');
         }
