@@ -102,7 +102,8 @@
 
         const PDF_RENDER_SCALE = 1.0;
 
-        let fileGen = null;
+        let pdfFilesSelected = [];
+        let imageFilesSelected = [];
         let listaDocumentos = [];
         let pdfRunTogether = true;
         let processingQueue = [];
@@ -335,11 +336,11 @@
            ---------------------------- */
         fileInput.addEventListener('change', async (e) => {
             const files = Array.from(e.target.files);
-            fileGen = null;
+            pdfFilesSelected = [];
+            imageFilesSelected = [];
             listaDocumentos = [];
             processingQueue = [];
             processingResults = [];
-            processingResults.length = 0;
             currentIndex = 0;
 
             if (!files.length) {
@@ -348,17 +349,8 @@
                 return;
             }
 
-            const pdfFiles = files.filter(f => f.type === "application/pdf");
-            const imageFiles = files.filter(f => f.type.startsWith("image/"));
-
-            // evitar mezcla
-            if (pdfFiles.length && imageFiles.length) {
-                Swal.fire("Aviso", "No puedes subir un PDF y una imagen al mismo tiempo.", "warning");
-                fileInput.value = "";
-                fileName.textContent = 'Ningún archivo seleccionado';
-                processBtn.disabled = true;
-                return;
-            }
+            pdfFilesSelected = files.filter(f => f.type === "application/pdf");
+            imageFilesSelected = files.filter(f => f.type.startsWith("image/"));
 
             // Validar tamaño total (20 MB)
             const totalSize = files.reduce((acc, f) => acc + f.size, 0);
@@ -370,19 +362,20 @@
                 return;
             }
 
-            if (pdfFiles.length > 0) {
-                fileGen = pdfFiles; // Ahora es un array de PDFs
-                fileName.textContent = pdfFiles.length === 1 ? pdfFiles[0].name : `${pdfFiles.length} PDFs seleccionados`;
-                processBtn.disabled = false;
-                await selecionaPaginasPdf(pdfFiles);
-                return;
+            // Actualizar nombre en UI
+            let names = [];
+            if (pdfFilesSelected.length) names.push(`${pdfFilesSelected.length} PDFs`);
+            if (imageFilesSelected.length) names.push(`${imageFilesSelected.length} imágenes`);
+            fileName.textContent = names.join(" y ") + " seleccionados";
+
+            // Si hay PDFs, mostrar modal de selección
+            if (pdfFilesSelected.length > 0) {
+                await selecionaPaginasPdf(pdfFilesSelected);
             }
 
-            if (imageFiles.length > 0) {
-                fileGen = imageFiles; // array de imágenes
-                fileName.textContent = imageFiles.length === 1 ? imageFiles[0].name : `${imageFiles.length} imágenes seleccionadas`;
+            // Habilitar si hay algo que procesar
+            if (pdfFilesSelected.length > 0 || imageFilesSelected.length > 0) {
                 processBtn.disabled = false;
-                return;
             }
         });
 
@@ -564,19 +557,23 @@
             }
 
             fileInput.value = '';
-            if (!fileGen) return;
+            if (pdfFilesSelected.length === 0 && imageFilesSelected.length === 0) return;
             processingQueue = [];
             processingResults = [];
 
             try {
-                // Si son PDFs seleccionados
-                if (Array.isArray(fileGen) && fileGen[0].type === "application/pdf") {
-                    if (!listaDocumentos.length) {
-                        Swal.fire("Aviso", "No has seleccionado páginas.", "warning");
-                        return;
-                    }
+                // 1. Añadir imágenes sueltas a la cola
+                imageFilesSelected.forEach(imgFile => {
+                    processingQueue.push({
+                        blob: imgFile,
+                        name: imgFile.name,
+                        sourceType: "image",
+                        meta: { originalName: imgFile.name }
+                    });
+                });
 
-                    // Agrupamos por archivo para no abrir el mismo PDF varias veces
+                // 2. Añadir PDFs seleccionados a la cola
+                if (pdfFilesSelected.length > 0 && listaDocumentos.length > 0) {
                     const grouped = listaDocumentos.reduce((acc, sel) => {
                         if (!acc[sel.fileIdx]) acc[sel.fileIdx] = { pages: [], mode: sel.mode };
                         acc[sel.fileIdx].pages.push(sel.pageIdx);
@@ -584,7 +581,7 @@
                     }, {});
 
                     for (const fIdx in grouped) {
-                        const file = fileGen[fIdx];
+                        const file = pdfFilesSelected[fIdx];
                         const { pages, mode } = grouped[fIdx];
                         const arrayBuffer = await file.arrayBuffer();
                         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -617,7 +614,6 @@
                             }
 
                             const imgBlob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.8));
-                            console.log(`Documento preparado: ${file.name}, Tamaño: ${(imgBlob.size / 1024 / 1024).toFixed(2)} MB`);
                             processingQueue.push({
                                 blob: imgBlob,
                                 name: file.name.replace(/\.pdf$/i, '') + "_seleccion.jpg",
@@ -625,7 +621,6 @@
                                 meta: { originalName: file.name }
                             });
                         } else {
-                            // Por separado
                             for (const pIdx of pages) {
                                 const page = await pdf.getPage(pIdx + 1);
                                 const viewport = page.getViewport({ scale: PDF_RENDER_SCALE });
@@ -636,7 +631,6 @@
                                 await page.render({ canvasContext: ctx, viewport }).promise;
 
                                 const imgBlob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.8));
-                                console.log(`Página preparada: ${file.name} p${pIdx + 1}, Tamaño: ${(imgBlob.size / 1024 / 1024).toFixed(2)} MB`);
                                 processingQueue.push({
                                     blob: imgBlob,
                                     name: file.name.replace(/\.pdf$/i, '') + `_p${pIdx + 1}.jpg`,
@@ -646,16 +640,6 @@
                             }
                         }
                     }
-                } else if (Array.isArray(fileGen)) {
-                    // Caso de imágenes
-                    fileGen.forEach(imgFile => {
-                        processingQueue.push({
-                            blob: imgFile,
-                            name: imgFile.name,
-                            sourceType: "image",
-                            meta: { originalName: imgFile.name }
-                        });
-                    });
                 }
             } catch (err) {
                 console.error("Error preparando documentos:", err);
@@ -705,7 +689,7 @@
                     console.log(`Enviando a: ${targetWebhook}`);
 
                     try {
-                        res = await fetch(targetWebhook, { method: "POST", body: formData });
+                        res = await fetch(N8N_WEBHOOK_URL, { method: "POST", body: formData });
                     } catch (e) {
                         console.error("Fallo de red o CORS:", e);
                         const msg = isLocal 
