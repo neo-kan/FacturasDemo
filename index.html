@@ -13,10 +13,13 @@
         <div id="containerCampToOcr">
             <div class="upload-card">
                 <input type="file" id="fileInput" accept=".pdf,image/*" multiple hidden>
-                <p>Máximo 15 páginas, 20 MB como máximo</p>
+                <p>Máximo 15 páginas, 20 MB como máximo<br><strong style="color: #d97706; font-size: 0.9em;">Límite
+                        demo: 10 documentos por usuario al día</strong></p>
                 <label for="fileInput" class="upload-button">📄 Subir documento</label>
                 <p id="fileName" class="file-name">Ningún archivo seleccionado</p>
                 <button id="processBtn" disabled>Procesar documento</button>
+                <p id="limitReached" style="color: #d90d06; font-size: 0.9em;opacity: 0;">Ya has alcanzado el límite de
+                    documentos permitidos para este usuario, vuelve mañana para continuar.</p>
             </div>
             <div class="search-card">
                 <p>Contenido a buscar</p>
@@ -64,6 +67,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";</script>
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/@panzoom/panzoom@4.5.1/dist/panzoom.min.js"></script>
 
     <script>
         /* ----------------------------
@@ -94,13 +98,14 @@
         const contSearchClave = document.getElementById('contSearchClave')
         const contSearchValor = document.getElementById('contSearchValor')
         const contFijoBtn = document.getElementById('contFijoBtn')
+        const limitReached = document.getElementById('limitReached')
 
         const ocrPreview = {
             _objectURL: null,
             src: ocrImage
         };
 
-        const PDF_RENDER_SCALE = 3;
+        const PDF_RENDER_SCALE = 4;
 
         let pdfFilesSelected = [];
         let imageFilesSelected = [];
@@ -110,6 +115,7 @@
         let processingResults = [];
         let currentIndex = 0;
         let listaContenidoBuscar = [];
+        let pzInstance = null;
 
         const fieldMap = { invoice_id: 'invoiceNumber', invoice_date: 'invoiceDate', supplier_tax_id: 'supplierNIF', total_amount: 'total', total: 'total' };
 
@@ -680,7 +686,7 @@
                 const searchStrings = listaContenidoBuscar.map(i => `"${i.clave}":"${i.valor}"`);
                 formData.append('listaContenidoBuscar', searchStrings);
 
-                console.log(listaContenidoBuscar)
+                //console.log(listaContenidoBuscar)
                 try {
                     let res;
                     const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
@@ -689,16 +695,21 @@
                     console.log(`Enviando a: ${targetWebhook}`);
 
                     try {
-                        res = await fetch(N8N_WEBHOOK_URL, { method: "POST", body: formData });
+                        res = await fetch(targetWebhook, { method: "POST", body: formData });
                     } catch (e) {
                         console.error("Fallo de red o CORS:", e);
-                        const msg = isLocal 
-                            ? "No se pudo contactar con n8n LOCAL. ¿Está Docker encendido?" 
+                        const msg = isLocal
+                            ? "No se pudo contactar con n8n LOCAL. ¿Está Docker encendido?"
                             : "No se pudo contactar con el n8n remoto (CORS o Red).";
                         throw new Error(msg);
                     }
 
                     if (!res.ok) {
+                        /*if (res.status === 429) {
+                            limitReached.style.opacity = "1";
+                            //Swal.fire("Error", "Límite diario alcanzado (10/10). No se pueden procesar más documentos hasta mañana.", "error");
+                            //throw new Error("Límite diario alcanzado (10/10). No se pueden procesar más documentos hasta mañana.");
+                        }*/
                         if (res.status === 504) throw new Error("Tiempo de espera agotado (504). n8n no respondió a tiempo.");
                         const errorText = await res.text();
                         throw new Error(`Error del servidor (${res.status}): ${errorText}`);
@@ -841,9 +852,9 @@
             currentIndex = i;
             resultInfo.innerText = `${i + 1} / ${processingResults.length} — ${r.name || 'Sin nombre'}`;
 
-            console.log("Renderizando resultado", i, r.name);
+            /*console.log("Renderizando resultado", i, r.name);
             console.log("listaContenidoBuscar actual:", listaContenidoBuscar);
-            console.log("Respuesta recibida:", r.response);
+            console.log("Respuesta recibida:", r.response);*/
 
             await loadPreview(r.blob);
             await new Promise(resolve => requestAnimationFrame(resolve));
@@ -898,6 +909,20 @@
                 confirmForm.prepend(errorDiv);
             }
             confirmForm.classList.remove('hidden');
+
+            // Iniciar o resetear Panzoom después de cargar el nuevo documento
+            if (pzInstance) {
+                pzInstance.destroy();
+            }
+            pzInstance = Panzoom(documentWrapper, {
+                maxScale: 6,
+                minScale: 0.2,
+                contain: 'outside',
+                step: 0.3
+            });
+            
+            // Permitir zoom con la rueda del ratón
+            documentWrapper.parentElement.addEventListener('wheel', pzInstance.zoomWithWheel);
         }
 
         /* Botones para cambiar de documento */
@@ -939,6 +964,42 @@
         new ResizeObserver(() => {
             if (processingResults.length) renderIndex(currentIndex);
         }).observe(documentWrapper);
+
+        /* ----------------------------
+           MEJORA DRAG & DROP: Reemplazo total de texto
+           ---------------------------- */
+        confirmForm.addEventListener('dragover', (e) => {
+            if (e.target.tagName === 'INPUT') {
+                e.preventDefault(); // Permitir el drop
+                e.target.classList.add('drag-over');
+            }
+        });
+
+        confirmForm.addEventListener('dragleave', (e) => {
+            if (e.target.tagName === 'INPUT') {
+                e.target.classList.remove('drag-over');
+            }
+        });
+
+        confirmForm.addEventListener('drop', (e) => {
+            if (e.target.tagName === 'INPUT') {
+                e.preventDefault();
+                e.target.classList.remove('drag-over');
+
+                // Obtener el texto arrastrado
+                const data = e.dataTransfer.getData('text/plain');
+                if (data) {
+                    // LIMPIEZA Y REEMPLAZO: Solo se queda lo que arrastras
+                    e.target.value = data.trim();
+
+                    // Pequeña animación de confirmación flash
+                    e.target.style.backgroundColor = '#dcfce7';
+                    setTimeout(() => {
+                        e.target.style.backgroundColor = '';
+                    }, 500);
+                }
+            }
+        });
     </script>
 </body>
 

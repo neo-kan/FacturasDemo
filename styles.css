@@ -85,6 +85,15 @@
             border: 1px solid #d1d5db;
             border-radius: 6px;
             width: 100%;
+            transition: all 0.2s ease;
+        }
+
+        #confirmForm input.drag-over {
+            border-color: #2563eb;
+            background-color: #eff6ff;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+            transform: scale(1.02);
+            cursor: copy;
         }
 
         #lineItemsTable {
@@ -159,6 +168,19 @@
         #documentWrapper {
             position: relative;
             display: inline-block;
+            cursor: grab;
+            transform-origin: 0 0;
+        }
+
+        #documentWrapper:active {
+            cursor: grabbing;
+        }
+
+        #documentSide {
+            flex: 1;
+            min-width: 420px;
+            position: relative;
+            overflow: hidden; /* Important for zooming */
         }
 
         #documentSide img {
